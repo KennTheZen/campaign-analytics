@@ -30,6 +30,7 @@ export async function loadData() {
       emailVisuals: data.email_visuals || [],
       notes: data.notes || {},
       aiConfig: data.ai_config || { provider: 'anthropic', apiKey: '', ollamaUrl: 'http://localhost:11434', ollamaModel: 'llama3' },
+      uploadLog: data.upload_log || [],
     }
   } catch (err) {
     console.error('Load error:', err)
@@ -47,6 +48,7 @@ export async function saveData(d) {
         email_visuals: d.emailVisuals || [],
         notes: d.notes || {},
         ai_config: d.aiConfig || {},
+        upload_log: d.uploadLog || [],
         updated_at: new Date().toISOString(),
       })
       .eq('id', ROW_ID)
