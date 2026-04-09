@@ -475,240 +475,137 @@ return <div style={{animation:"fadeIn .3s ease"}}><div style={{background:C.whit
 
 // ========= TAB: CUSTOM REPORTS =========
 function CustomReportsTab({aiConfig}) {
+  // Single campaign report state
   const [report, setReport] = useState(null);
   const [clickersData, setClickersData] = useState(null);
   const [screenshot, setScreenshot] = useState(null);
   const [aiNotes, setAiNotes] = useState(null);
   const [genAI, setGenAI] = useState(false);
+  const [kennNotes, setKennNotes] = useState("");
+  const [sections, setSections] = useState({details:true,core:true,engagement:true,issues:true,urls:true,benchmarks:true,clickers:true,ai:true,kenn:true,screenshot:true});
+  const toggleSec = (k) => setSections(p => ({...p,[k]:!p[k]}));
 
-  const handleReport = (file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      if (isMailchimpReport(text)) {
-        setReport(parseMailchimpReport(text));
-      }
-    };
-    reader.readAsText(file);
+  // Multi-campaign report state
+  const [multiReports, setMultiReports] = useState([]);
+  const [multiKennNotes, setMultiKennNotes] = useState("");
+
+  const handleReport = (file) => { const r = new FileReader(); r.onload = e => { const text = e.target.result; if (isMailchimpReport(text)) setReport(parseMailchimpReport(text)); else { const rows = parseCSV(text); const k = Object.keys(rows[0]||{}).map(k=>k.toLowerCase()); if (k.includes("field")) { const kv = {}; const urls = []; let inU = false; rows.forEach(row => { const f = (row.Field||row.field||"").trim(); const v = (row.Value||row.value||"").trim(); const c3 = Object.values(row)[2]||""; if (f==="URL"){inU=true;return} if (inU&&f.startsWith("http")){urls.push({url:f,totalClicks:parseInt(v.replace(/,/g,""))||0,uniqueClicks:parseInt(String(c3).replace(/,/g,""))||0});return} if(f)kv[f.toLowerCase()]=v }); setReport({title:kv.title||"",subjectLine:kv["subject line"]||"",date:kv.date||"",sends:parseInt((kv["total recipients"]||"0").replace(/,/g,""))||0,delivered:parseInt((kv["successful deliveries"]||"0").replace(/,/g,""))||0,opens:parseInt((kv["unique opens"]||"0").replace(/,/g,""))||0,openRate:parseFloat((kv["open rate"]||"0").replace("%",""))||0,totalOpens:parseInt((kv["total opens"]||"0").replace(/,/g,""))||0,clicks:parseInt((kv["unique clicks"]||"0").replace(/,/g,""))||0,clickRate:parseFloat((kv["click rate"]||"0").replace("%",""))||0,totalClicks:parseInt((kv["total clicks"]||"0").replace(/,/g,""))||0,bounces:parseInt((kv.bounces||"0").replace(/,/g,""))||0,bounceRate:0,unsubs:parseInt((kv.unsubscribes||"0").replace(/,/g,""))||0,urlClicks:urls,_isMailchimpReport:true}) } } }; r.readAsText(file) };
+  const handleClickers = (file) => { const r = new FileReader(); r.onload = e => { const rows = parseCSV(e.target.result); setClickersData(rows.map(r => mapClickerRow(r)).filter(c => c.email)) }; r.readAsText(file) };
+  const handleScreenshot = (file) => { const r = new FileReader(); r.onload = e => setScreenshot({data:e.target.result,name:file.name}); r.readAsDataURL(file) };
+  const handleMultiReport = (file) => { const r = new FileReader(); r.onload = e => { const text = e.target.result; let parsed = null; if (isMailchimpReport(text)) parsed = parseMailchimpReport(text); else { const rows = parseCSV(text); const k = Object.keys(rows[0]||{}).map(k=>k.toLowerCase()); if (k.includes("field")) { const kv = {}; const urls = []; let inU = false; rows.forEach(row => { const f=(row.Field||row.field||"").trim(); const v=(row.Value||row.value||"").trim(); const c3=Object.values(row)[2]||""; if(f==="URL"){inU=true;return} if(inU&&f.startsWith("http")){urls.push({url:f,totalClicks:parseInt(v.replace(/,/g,""))||0,uniqueClicks:parseInt(String(c3).replace(/,/g,""))||0});return} if(f)kv[f.toLowerCase()]=v }); parsed = {title:kv.title||file.name,subjectLine:kv["subject line"]||"",date:kv.date||"",sends:parseInt((kv["total recipients"]||"0").replace(/,/g,""))||0,delivered:parseInt((kv["successful deliveries"]||"0").replace(/,/g,""))||0,opens:parseInt((kv["unique opens"]||"0").replace(/,/g,""))||0,openRate:parseFloat((kv["open rate"]||"0").replace("%",""))||0,totalOpens:parseInt((kv["total opens"]||"0").replace(/,/g,""))||0,clicks:parseInt((kv["unique clicks"]||"0").replace(/,/g,""))||0,clickRate:parseFloat((kv["click rate"]||"0").replace("%",""))||0,totalClicks:parseInt((kv["total clicks"]||"0").replace(/,/g,""))||0,bounces:parseInt((kv.bounces||"0").replace(/,/g,""))||0,bounceRate:0,unsubs:parseInt((kv.unsubscribes||"0").replace(/,/g,""))||0,urlClicks:urls,_isMailchimpReport:true} } } if (parsed) setMultiReports(prev => [...prev, parsed]) }; r.readAsText(file) };
+
+  const generateAI = async () => { if (!report) return; setGenAI(true); try { const bR=report.sends>0?(report.bounces/report.sends*100).toFixed(2):"0"; const prompt=`Analyze this email campaign vs industry benchmarks (avg open ~21%, click ~2.5%, bounce ~2%, unsub ~0.5%). Be specific with numbers.\nTitle: ${report.title}\nSubject: ${report.subjectLine}\nRecipients: ${report.sends}, Opens: ${report.opens} (${report.openRate}%), Clicks: ${report.clicks} (${report.clickRate}%), Bounces: ${report.bounces} (${bR}%), Unsubs: ${report.unsubs}\n\nReturn JSON only: {"summary":"2-3 specific sentences","recommendations":["specific rec1","specific rec2","specific rec3"]}`; let text=""; if(aiConfig.provider==="ollama"){const r2=await fetch(aiConfig.ollamaUrl+"/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:aiConfig.ollamaModel,prompt,stream:false})});text=(await r2.json()).response||""}else{const h={"Content-Type":"application/json"};if(aiConfig.apiKey)h["x-api-key"]=aiConfig.apiKey;const r2=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:h,body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})});text=(await r2.json()).content?.map(c=>c.text||"").join("")||""} const cl=text.replace(/```json|```/g,"").trim();const jm=cl.match(/\{[\s\S]*\}/);setAiNotes(JSON.parse(jm?jm[0]:cl))}catch{setAiNotes({summary:`${report.title}: ${report.openRate}% open rate (${report.openRate>21?"above":"below"} avg), ${report.clickRate}% click rate (${report.clickRate>2.5?"above":"below"} avg).`,recommendations:["Optimize subject lines","Improve CTA placement","Segment audience"]})} setGenAI(false) };
+
+  // Shared styles for report
+  const S = {hdr:"background:linear-gradient(135deg,#2d1a54,#4225a6);padding:36px 40px;text-align:center;color:#fff",secTitle:"background:#4225a6;color:#fff;padding:12px 24px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-top:28px",grpTitle:"background:#e8e0f7;color:#2d1a54;padding:10px 24px;font-size:11px;font-weight:700;text-transform:uppercase;margin-top:20px",row:"display:flex;justify-content:space-between;padding:12px 24px;border-bottom:1px solid #e8e0f7;font-size:13px"};
+
+  const buildHTML = (reps, kNotes) => {
+    const css = `*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Segoe UI,sans-serif;background:#f5f2fc;padding:40px}.page{max-width:750px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(45,26,84,.1)}.hdr{${S.hdr}}.hdr h1{font-size:22px;font-weight:700;letter-spacing:1px;margin-bottom:6px}.hdr p{font-size:13px;opacity:.7;text-transform:uppercase;letter-spacing:2px}.sec-title{${S.secTitle}}.grp-title{${S.grpTitle}}.row{${S.row}}.row .lbl{color:#2d1a54;font-weight:600}.row .val{color:#4225a6;font-weight:700}table{width:100%;border-collapse:collapse}th{background:#2d1a54;color:#fff;padding:10px 16px;text-align:left;font-size:11px;text-transform:uppercase}td{padding:10px 16px;border-bottom:1px solid #e8e0f7;font-size:12px;color:#2d1a54}.ai-box{background:#f5f2fc;border-left:4px solid #4225a6;padding:16px 24px;margin:16px 24px;border-radius:0 8px 8px 0}.ai-box h4{color:#4225a6;font-size:11px;text-transform:uppercase;margin-bottom:8px}.ai-box p,.ai-box li{font-size:12px;line-height:1.8;color:#2d1a54}.bench{display:flex;gap:16px;padding:16px 24px;flex-wrap:wrap}.bench-item{flex:1;min-width:120px;background:#f5f2fc;border-radius:10px;padding:14px;text-align:center}.bench-item .v{font-size:20px;font-weight:700;color:#4225a6}.bench-item .l{font-size:10px;color:#6b5f7d;margin-top:4px}.kenn-box{background:#fef7f0;border-left:4px solid #f59e0b;padding:16px 24px;margin:16px 24px;border-radius:0 8px 8px 0}.ft{text-align:center;padding:20px;color:#4225a6;font-size:10px;border-top:1px solid #e8e0f7}`;
+    let body = "";
+    reps.forEach((r, idx) => {
+      const bR = r.sends>0?(r.bounces/r.sends*100).toFixed(2):"0";
+      const uR = r.sends>0?(r.unsubs/r.sends*100).toFixed(2):"0";
+      const campLabel = reps.length > 1 ? ` - ${r.title}` : "";
+      body += `<div class="sec-title">Campaign Details${campLabel}</div><div class="row"><span class="lbl">Subject Line</span><span class="val">${r.subjectLine}</span></div><div class="row"><span class="lbl">Send Date and Time</span><span class="val">${r.date}</span></div>`;
+      body += `<div class="grp-title">Core Metrics${campLabel}</div><div class="row"><span class="lbl">Total Recipients</span><span class="val">${r.sends?.toLocaleString()}</span></div><div class="row"><span class="lbl">Successful Deliveries</span><span class="val">${r.delivered?.toLocaleString()}</span></div>`;
+      body += `<div class="grp-title">Engagement${campLabel}</div><div class="row"><span class="lbl">Unique Opens and Open Rate</span><span class="val">${r.opens?.toLocaleString()} (${r.openRate}%)</span></div><div class="row"><span class="lbl">Total Opens</span><span class="val">${r.totalOpens?.toLocaleString()}</span></div><div class="row"><span class="lbl">Unique Clicks and Click Rate</span><span class="val">${r.clicks?.toLocaleString()} (${r.clickRate}%)</span></div><div class="row"><span class="lbl">Total Clicks</span><span class="val">${r.totalClicks?.toLocaleString()}</span></div>`;
+      body += `<div class="grp-title">Issues${campLabel}</div><div class="row"><span class="lbl">Bounces</span><span class="val">${r.bounces?.toLocaleString()} (${r.bounceRate||bR}%)</span></div><div class="row"><span class="lbl">Unsubscribes</span><span class="val">${r.unsubs} (${uR}%)</span></div>`;
+      if (r.urlClicks?.length) { body += `<div class="sec-title">Clicks by URL${campLabel}</div><table><thead><tr><th>URL</th><th>Total Clicks</th><th>Unique Clicks</th></tr></thead><tbody>${r.urlClicks.map(u=>`<tr><td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.url}</td><td style="font-weight:700;color:#4225a6">${u.totalClicks}</td><td>${u.uniqueClicks}</td></tr>`).join("")}</tbody></table>`; }
+    });
+    body += `<div class="sec-title">Industry Benchmarks</div><div class="bench"><div class="bench-item"><div class="v">21.0%</div><div class="l">Avg Open Rate</div></div><div class="bench-item"><div class="v">2.5%</div><div class="l">Avg Click Rate</div></div><div class="bench-item"><div class="v">2.0%</div><div class="l">Avg Bounce Rate</div></div><div class="bench-item"><div class="v">0.5%</div><div class="l">Avg Unsub Rate</div></div></div><p style="padding:4px 24px 16px;font-size:9px;color:#6b5f7d">Source: Mailchimp Email Marketing Benchmarks (2024)</p>`;
+    if (kNotes) { body += `<div class="sec-title">Kenn's Notes</div><div class="kenn-box"><p style="font-size:12px;line-height:1.8;color:#2d1a54;white-space:pre-wrap">${kNotes}</p></div>`; }
+    const title = reps.length === 1 ? (reps[0].title || "Campaign Report") : "Multi-Campaign Report";
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet"><style>${css}</style></head><body><div class="page"><div class="hdr"><h1>${title}</h1><p>Email Campaign Report</p></div>${body}<div class="ft">Email Campaign Analytics by kenn.d</div></div></body></html>`;
   };
 
-  const handleClickers = (file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const rows = parseCSV(e.target.result);
-      setClickersData(rows.map(r => mapClickerRow(r)).filter(c => c.email));
-    };
-    reader.readAsText(file);
-  };
+  const dlHTML = (reps, kN, name) => { const b = new Blob([buildHTML(reps, kN)],{type:"text/html"}); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name.replace(/[^a-zA-Z0-9]/g,"_")+".html"; a.click() };
+  const dlCSV = (reps, name) => { const rows = [["Field","Value"]]; reps.forEach(r => { rows.push(["--- "+r.title+" ---",""]); rows.push(["Subject",r.subjectLine],["Date",r.date],["Recipients",r.sends],["Deliveries",r.delivered],["Opens",r.opens],["Open Rate",r.openRate+"%"],["Total Opens",r.totalOpens],["Clicks",r.clicks],["Click Rate",r.clickRate+"%"],["Total Clicks",r.totalClicks],["Bounces",r.bounces],["Unsubs",r.unsubs],["",""]); if(r.urlClicks?.length){rows.push(["URL","Total Clicks","Unique Clicks"]);r.urlClicks.forEach(u=>rows.push([u.url,u.totalClicks,u.uniqueClicks]));rows.push(["",""])} }); downloadCSVData(rows[0],rows.slice(1),name.replace(/[^a-zA-Z0-9]/g,"_")) };
 
-  const handleScreenshot = (file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => setScreenshot({ data: e.target.result, name: file.name });
-    reader.readAsDataURL(file);
-  };
-
-  const generateAI = async () => {
-    if (!report) return;
-    setGenAI(true);
-    try {
-      const prompt = `Analyze this email campaign briefly:\nTitle: ${report.title}\nSubject: ${report.subjectLine}\nSends: ${report.sends}, Opens: ${report.opens} (${report.openRate}%), Clicks: ${report.clicks} (${report.clickRate}%), Bounces: ${report.bounces}, Unsubs: ${report.unsubs}\n\nReturn JSON only: {"summary":"2-3 sentences","recommendations":["r1","r2","r3"]}`;
-      let text = "";
-      if (aiConfig.provider === "ollama") {
-        const r = await fetch(aiConfig.ollamaUrl + "/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: aiConfig.ollamaModel, prompt, stream: false }) });
-        text = (await r.json()).response || "";
-      } else {
-        const h = { "Content-Type": "application/json" };
-        if (aiConfig.apiKey) h["x-api-key"] = aiConfig.apiKey;
-        const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: h, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }) });
-        text = (await r.json()).content?.map(c => c.text || "").join("") || "";
-      }
-      const cl = text.replace(/```json|```/g, "").trim();
-      const jm = cl.match(/\{[\s\S]*\}/);
-      setAiNotes(JSON.parse(jm ? jm[0] : cl));
-    } catch (err) {
-      console.error(err);
-      setAiNotes({ summary: report.title + " achieved " + report.openRate + "% open rate and " + report.clickRate + "% click rate.", recommendations: ["Review subject line performance", "Optimize for engagement", "Monitor deliverability"] });
-    }
-    setGenAI(false);
-  };
-
-  const P = { dk: "#2d1a54", md: "#4225a6", lt: "#6b52c4", vlt: "#e8e0f7", bg: "#f5f2fc", white: "#fff", border: "#d4cbe8" };
-
-  const reportHTML = () => {
-    if (!report) return "";
-    const r = report;
-    const bRate = r.sends > 0 ? (r.bounces / r.sends * 100).toFixed(2) : "0";
-    const uRate = r.sends > 0 ? (r.unsubs / r.sends * 100).toFixed(2) : "0";
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Segoe UI,sans-serif;background:#f5f2fc;padding:40px}
-.page{max-width:700px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(45,26,84,.1)}
-.hdr{background:linear-gradient(135deg,${P.dk},${P.md});padding:36px 40px;text-align:center;color:#fff}
-.hdr h1{font-size:22px;font-weight:700;letter-spacing:1px;margin-bottom:4px}.hdr h2{font-size:13px;font-weight:400;opacity:.7;text-transform:uppercase;letter-spacing:2px}
-.section{padding:0 40px}.section-title{background:${P.md};color:#fff;padding:10px 20px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:24px -40px 0;width:calc(100% + 80px)}
-.row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid ${P.vlt};font-size:13px}.row .label{color:${P.dk};font-weight:600}.row .val{color:${P.md};font-weight:700}
-.group-title{background:${P.vlt};color:${P.dk};padding:8px 20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:0 -40px;width:calc(100% + 80px)}
-table{width:100%;border-collapse:collapse;margin:12px 0}th{background:${P.dk};color:#fff;padding:10px 16px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px}td{padding:10px 16px;border-bottom:1px solid ${P.vlt};font-size:12px;color:${P.dk}}tr:hover td{background:${P.bg}}
-.ai-box{background:${P.bg};border-left:4px solid ${P.md};padding:16px 20px;margin:16px 0;border-radius:0 8px 8px 0}.ai-box h4{color:${P.md};font-size:11px;text-transform:uppercase;margin-bottom:8px}.ai-box p{font-size:12px;line-height:1.6;color:${P.dk}}.ai-box li{font-size:12px;line-height:1.8;color:${P.dk}}
-.footer{text-align:center;padding:20px 40px;color:${P.md};font-size:10px;border-top:1px solid ${P.vlt}}
-.screenshot{text-align:center;padding:20px 0}img.email-img{max-width:100%;border-radius:8px;border:1px solid ${P.border}}
-</style></head><body><div class="page">
-<div class="hdr"><h1>${r.title || "Campaign Report"}</h1><h2>Email Campaign Report</h2></div>
-<div class="section">
-<div class="section-title">Campaign Details</div>
-<div class="row"><span class="label">Subject Line</span><span class="val">${r.subjectLine}</span></div>
-<div class="row"><span class="label">Send Date and Time</span><span class="val">${r.date}</span></div>
-
-<div class="group-title">Core Metrics</div>
-<div class="row"><span class="label">Total Recipients</span><span class="val">${r.sends?.toLocaleString()}</span></div>
-<div class="row"><span class="label">Successful Deliveries</span><span class="val">${r.delivered?.toLocaleString()}</span></div>
-
-<div class="group-title">Engagement</div>
-<div class="row"><span class="label">Unique Opens and Open Rate</span><span class="val">${r.opens?.toLocaleString()} (${r.openRate}%)</span></div>
-<div class="row"><span class="label">Total Opens</span><span class="val">${r.totalOpens?.toLocaleString()}</span></div>
-<div class="row"><span class="label">Unique Clicks and Click Rate</span><span class="val">${r.clicks?.toLocaleString()} (${r.clickRate}%)</span></div>
-<div class="row"><span class="label">Total Clicks</span><span class="val">${r.totalClicks?.toLocaleString()}</span></div>
-
-<div class="group-title">Issues</div>
-<div class="row"><span class="label">Bounces</span><span class="val">${r.bounces?.toLocaleString()} (${r.bounceRate || bRate}%)</span></div>
-<div class="row"><span class="label">Unsubscribes</span><span class="val">${r.unsubs} (${uRate}%)</span></div>
-
-${r.urlClicks?.length ? `<div class="section-title">Clicks by URL</div><table><thead><tr><th>URL</th><th>Total Clicks</th><th>Unique Clicks</th></tr></thead><tbody>${r.urlClicks.map(u => `<tr><td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.url}</td><td>${u.totalClicks}</td><td>${u.uniqueClicks}</td></tr>`).join("")}</tbody></table>` : ""}
-
-${clickersData?.length ? `<div class="section-title">Clickers (${clickersData.length})</div><table><thead><tr><th>Email</th><th>Name</th><th>Company</th><th>State</th></tr></thead><tbody>${clickersData.slice(0, 30).map(c => `<tr><td>${c.email}</td><td>${c.firstName} ${c.lastName}</td><td>${c.company}</td><td>${c.state}</td></tr>`).join("")}</tbody></table>${clickersData.length > 30 ? `<p style="text-align:center;padding:8px;color:${P.md};font-size:11px">Showing 30 of ${clickersData.length} clickers</p>` : ""}` : ""}
-
-${aiNotes ? `<div class="section-title">AI Insights</div><div class="ai-box"><h4>Summary</h4><p>${aiNotes.summary}</p></div><div class="ai-box"><h4>Recommendations</h4><ul>${(aiNotes.recommendations || []).map(r => `<li>${r}</li>`).join("")}</ul></div>` : ""}
-
-${screenshot ? `<div class="section-title">Email Preview</div><div class="screenshot"><img class="email-img" src="${screenshot.data}" alt="Email Preview"/></div>` : ""}
-</div>
-<div class="footer">Email Campaign Analytics by kenn.d</div>
-</div></body></html>`;
-  };
-
-  const downloadHTML = () => {
-    const html = reportHTML();
-    const blob = new Blob([html], { type: "text/html" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = (report?.title || "report").replace(/[^a-zA-Z0-9]/g, "_") + ".html";
-    a.click();
-  };
-
-  const downloadReportCSV = () => {
-    if (!report) return;
-    const r = report;
-    const rows = [["Field", "Value"], ["Title", r.title], ["Subject Line", r.subjectLine], ["Date", r.date], ["Total Recipients", r.sends], ["Successful Deliveries", r.delivered], ["Unique Opens", r.opens], ["Open Rate", r.openRate + "%"], ["Total Opens", r.totalOpens], ["Unique Clicks", r.clicks], ["Click Rate", r.clickRate + "%"], ["Total Clicks", r.totalClicks], ["Bounces", r.bounces], ["Unsubscribes", r.unsubs]];
-    if (r.urlClicks?.length) { rows.push(["", ""]); rows.push(["URL", "Total Clicks", "Unique Clicks"]); r.urlClicks.forEach(u => rows.push([u.url, u.totalClicks, u.uniqueClicks])); }
-    downloadCSVData(rows[0], rows.slice(1), (r.title || "report").replace(/[^a-zA-Z0-9]/g, "_"));
-  };
-
-  const downloadReportPNG = () => downloadPNG("custom-report-preview", (report?.title || "report").replace(/[^a-zA-Z0-9]/g, "_"));
+  // Report row helper
+  const RRow = ({label,value}) => <div style={{display:"flex",justifyContent:"space-between",padding:"12px 24px",borderBottom:"1px solid #e8e0f7",fontSize:13}}><span style={{color:"#2d1a54",fontWeight:600}}>{label}</span><span style={{color:"#4225a6",fontWeight:700}}>{value}</span></div>;
+  const SecTitle = ({children}) => <div style={{background:"#4225a6",color:"#fff",padding:"12px 24px",fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginTop:28}}>{children}</div>;
+  const GrpTitle = ({children}) => <div style={{background:"#e8e0f7",color:"#2d1a54",padding:"10px 24px",fontSize:11,fontWeight:700,textTransform:"uppercase",marginTop:20}}>{children}</div>;
+  const SecToggle = ({label,k}) => <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.dark,cursor:"pointer"}}><input type="checkbox" checked={sections[k]} onChange={()=>toggleSec(k)}/>{label}</label>;
 
   return (
-    <div style={{ animation: "fadeIn .3s ease" }}>
-      {/* Upload Section */}
-      <div style={{ background: C.white, borderRadius: 14, padding: 22, border: "1px solid #f0ecf4", marginBottom: 20 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 4 }}>Generate Custom Report</h3>
-        <p style={{ fontSize: 11, color: C.muted, marginBottom: 16 }}>Upload a Mailchimp campaign report to generate a polished, shareable report. Add clicker data, screenshots, and AI notes.</p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-          <DropZone label="Campaign Report (CSV)" onFile={handleReport} loaded={!!report} count={report ? 1 : 0} />
-          <DropZone label="Clickers Data (CSV)" onFile={handleClickers} loaded={!!clickersData} count={clickersData?.length} />
-          <div>
-            <div onClick={() => document.getElementById("cr-screenshot")?.click()} style={{ border: "2px dashed " + (screenshot ? C.success : "#ddd"), borderRadius: 12, padding: "22px 20px", textAlign: "center", cursor: "pointer", background: screenshot ? C.success + "08" : "#faf8fc" }}>
-              <input id="cr-screenshot" type="file" accept="image/*" style={{ display: "none" }} onChange={e => e.target.files[0] && handleScreenshot(e.target.files[0])} />
-              {screenshot ? <><CheckCircle size={20} color={C.success} style={{ marginBottom: 4 }} /><p style={{ fontSize: 12, fontWeight: 600, color: C.success }}>Screenshot added</p></> : <><Image size={20} color={C.muted} style={{ marginBottom: 4 }} /><p style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>Email Screenshot</p><p style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Optional</p></>}
-            </div>
-          </div>
+    <div style={{animation:"fadeIn .3s ease"}}>
+      {/* ===== SINGLE CAMPAIGN REPORT ===== */}
+      <div style={{background:C.white,borderRadius:14,padding:22,border:"1px solid #f0ecf4",marginBottom:20}}>
+        <h3 style={{fontSize:14,fontWeight:700,color:C.dark,marginBottom:4}}>Generate Custom Report</h3>
+        <p style={{fontSize:11,color:C.muted,marginBottom:16}}>Upload a campaign report, add clicker data, screenshots, and notes to generate a polished shareable report.</p>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:16}}>
+          <DropZone label="Campaign Report (CSV)" onFile={handleReport} loaded={!!report} count={report?1:0}/>
+          <DropZone label="Clickers Data (CSV)" onFile={handleClickers} loaded={!!clickersData} count={clickersData?.length}/>
+          <div><div onClick={()=>document.getElementById("cr-ss")?.click()} style={{border:"2px dashed "+(screenshot?C.success:"#ddd"),borderRadius:12,padding:"22px 20px",textAlign:"center",cursor:"pointer",background:screenshot?C.success+"08":"#faf8fc"}}><input id="cr-ss" type="file" accept="image/*" style={{display:"none"}} onChange={e=>e.target.files[0]&&handleScreenshot(e.target.files[0])}/>{screenshot?<><CheckCircle size={20} color={C.success} style={{marginBottom:4}}/><p style={{fontSize:12,fontWeight:600,color:C.success}}>Added</p></>:<><Image size={20} color={C.muted} style={{marginBottom:4}}/><p style={{fontSize:12,fontWeight:600,color:C.dark}}>Screenshot</p></>}</div></div>
         </div>
-        {report && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button onClick={generateAI} disabled={genAI} style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 16px", background: genAI ? C.muted : "linear-gradient(135deg, " + C.primary + ", " + C.secondary + ")", color: "#fff", border: "none", borderRadius: 9, fontSize: 11, fontWeight: 600, cursor: genAI ? "default" : "pointer" }}>
-              {genAI ? <div style={{ width: 12, height: 12, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin .6s linear infinite" }} /> : <Brain size={13} />}
-              {aiNotes ? "Regenerate AI Notes" : "Generate AI Notes"}
-            </button>
-            <div style={{ flex: 1 }} />
-            <button onClick={downloadHTML} style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 14px", background: C.secondary, color: "#fff", border: "none", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer" }}><Download size={12} /> HTML</button>
-            <button onClick={downloadReportCSV} style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 14px", background: "#f5f2f8", border: "1px solid #e8e4ee", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer", color: C.dark }}><Download size={12} /> CSV</button>
-            <button onClick={downloadReportPNG} style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 14px", background: "#f5f2f8", border: "1px solid #e8e4ee", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer", color: C.dark }}><Download size={12} /> PNG</button>
+
+        {/* Kenn's Notes */}
+        <div style={{marginBottom:16}}>
+          <label style={{display:"block",fontSize:10,fontWeight:600,color:C.muted,marginBottom:4,textTransform:"uppercase"}}>Kenn's Notes (appears in report)</label>
+          <textarea value={kennNotes} onChange={e=>setKennNotes(e.target.value)} placeholder="Add your own notes, observations, or context..." rows={3} style={{width:"100%",padding:"10px 14px",borderRadius:9,border:"1px solid #e8e4ee",fontSize:12,outline:"none",resize:"vertical"}}/>
+        </div>
+
+        {/* Section toggles */}
+        {report && <div style={{marginBottom:16,padding:12,background:"#faf8fc",borderRadius:8}}>
+          <p style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:8,textTransform:"uppercase"}}>Show/Hide Sections</p>
+          <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+            <SecToggle label="Details" k="details"/><SecToggle label="Core Metrics" k="core"/><SecToggle label="Engagement" k="engagement"/><SecToggle label="Issues" k="issues"/><SecToggle label="URLs" k="urls"/><SecToggle label="Benchmarks" k="benchmarks"/><SecToggle label="Clickers" k="clickers"/><SecToggle label="AI Notes" k="ai"/><SecToggle label="Kenn's Notes" k="kenn"/><SecToggle label="Screenshot" k="screenshot"/>
           </div>
-        )}
+        </div>}
+
+        {report && <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <button onClick={generateAI} disabled={genAI} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 16px",background:genAI?C.muted:`linear-gradient(135deg,${C.primary},${C.secondary})`,color:"#fff",border:"none",borderRadius:9,fontSize:11,fontWeight:600,cursor:genAI?"default":"pointer"}}>{genAI?<div style={{width:12,height:12,border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin .6s linear infinite"}}/>:<Brain size={13}/>}{aiNotes?"Regenerate AI":"Generate AI Notes"}</button>
+          <div style={{flex:1}}/>
+          <button onClick={()=>dlHTML([report],kennNotes,report.title||"report")} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 14px",background:C.secondary,color:"#fff",border:"none",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}><Download size={12}/> HTML</button>
+          <button onClick={()=>dlCSV([report],report.title||"report")} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 14px",background:"#f5f2f8",border:"1px solid #e8e4ee",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",color:C.dark}}><Download size={12}/> CSV</button>
+          <button onClick={()=>downloadPNG("cr-preview",report.title||"report")} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 14px",background:"#f5f2f8",border:"1px solid #e8e4ee",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",color:C.dark}}><Download size={12}/> PNG</button>
+        </div>}
       </div>
 
-      {/* Report Preview */}
+      {/* Single Report Preview */}
       {report ? (
-        <div id="custom-report-preview" style={{ background: C.white, borderRadius: 14, overflow: "hidden", border: "1px solid #d4cbe8", boxShadow: "0 4px 24px rgba(45,26,84,.08)" }}>
-          {/* Header */}
-          <div style={{ background: "linear-gradient(135deg, #2d1a54, #4225a6)", padding: "32px 40px", textAlign: "center", color: "#fff" }}>
-            <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>{report.title || "Campaign Report"}</h2>
-            <p style={{ fontSize: 12, opacity: .7, textTransform: "uppercase", letterSpacing: 2 }}>Email Campaign Report</p>
+        <div id="cr-preview" style={{background:C.white,borderRadius:14,overflow:"hidden",border:"1px solid #d4cbe8",boxShadow:"0 4px 24px rgba(45,26,84,.08)",marginBottom:24}}>
+          <div style={{background:"linear-gradient(135deg,#2d1a54,#4225a6)",padding:"36px 40px",textAlign:"center",color:"#fff"}}>
+            <h2 style={{fontSize:20,fontWeight:700,letterSpacing:1,marginBottom:6}}>{report.title||"Campaign Report"}</h2>
+            <p style={{fontSize:13,opacity:.7,textTransform:"uppercase",letterSpacing:2}}>Email Campaign Report</p>
           </div>
-
-          <div style={{ padding: "0 40px 30px" }}>
-            {/* Campaign Details */}
-            <div style={{ background: "#4225a6", color: "#fff", padding: "10px 20px", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "24px -40px 0", width: "calc(100% + 80px)" }}>Campaign Details</div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #e8e0f7", fontSize: 13 }}><span style={{ color: "#2d1a54", fontWeight: 600 }}>Subject Line</span><span style={{ color: "#4225a6", fontWeight: 700 }}>{report.subjectLine}</span></div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #e8e0f7", fontSize: 13 }}><span style={{ color: "#2d1a54", fontWeight: 600 }}>Send Date and Time</span><span style={{ color: "#4225a6", fontWeight: 700 }}>{report.date}</span></div>
-
-            {/* Core Metrics */}
-            <div style={{ background: "#e8e0f7", color: "#2d1a54", padding: "8px 20px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", margin: "16px -40px 0", width: "calc(100% + 80px)" }}>Core Metrics</div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e8e0f7", fontSize: 13 }}><span style={{ color: "#2d1a54", fontWeight: 600 }}>Total Recipients</span><span style={{ color: "#4225a6", fontWeight: 700 }}>{report.sends?.toLocaleString()}</span></div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e8e0f7", fontSize: 13 }}><span style={{ color: "#2d1a54", fontWeight: 600 }}>Successful Deliveries</span><span style={{ color: "#4225a6", fontWeight: 700 }}>{report.delivered?.toLocaleString()}</span></div>
-
-            {/* Engagement */}
-            <div style={{ background: "#e8e0f7", color: "#2d1a54", padding: "8px 20px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", margin: "16px -40px 0", width: "calc(100% + 80px)" }}>Engagement</div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e8e0f7", fontSize: 13 }}><span style={{ color: "#2d1a54", fontWeight: 600 }}>Unique Opens and Open Rate</span><span style={{ color: "#4225a6", fontWeight: 700 }}>{report.opens?.toLocaleString()} ({report.openRate}%)</span></div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e8e0f7", fontSize: 13 }}><span style={{ color: "#2d1a54", fontWeight: 600 }}>Total Opens</span><span style={{ color: "#4225a6", fontWeight: 700 }}>{report.totalOpens?.toLocaleString()}</span></div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e8e0f7", fontSize: 13 }}><span style={{ color: "#2d1a54", fontWeight: 600 }}>Unique Clicks and Click Rate</span><span style={{ color: "#4225a6", fontWeight: 700 }}>{report.clicks?.toLocaleString()} ({report.clickRate}%)</span></div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e8e0f7", fontSize: 13 }}><span style={{ color: "#2d1a54", fontWeight: 600 }}>Total Clicks</span><span style={{ color: "#4225a6", fontWeight: 700 }}>{report.totalClicks?.toLocaleString()}</span></div>
-
-            {/* Issues */}
-            <div style={{ background: "#e8e0f7", color: "#2d1a54", padding: "8px 20px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", margin: "16px -40px 0", width: "calc(100% + 80px)" }}>Issues</div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e8e0f7", fontSize: 13 }}><span style={{ color: "#2d1a54", fontWeight: 600 }}>Bounces</span><span style={{ color: "#4225a6", fontWeight: 700 }}>{report.bounces?.toLocaleString()} ({report.bounceRate}%)</span></div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e8e0f7", fontSize: 13 }}><span style={{ color: "#2d1a54", fontWeight: 600 }}>Unsubscribes</span><span style={{ color: "#4225a6", fontWeight: 700 }}>{report.unsubs}</span></div>
-
-            {/* Clicks by URL */}
-            {report.urlClicks?.length > 0 && <>
-              <div style={{ background: "#2d1a54", color: "#fff", padding: "10px 20px", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "24px -40px 0", width: "calc(100% + 80px)" }}>Clicks by URL</div>
-              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
-                <thead><tr><th style={{ background: "#2d1a54", color: "#fff", padding: "10px 16px", textAlign: "left", fontSize: 11, textTransform: "uppercase" }}>URL</th><th style={{ background: "#2d1a54", color: "#fff", padding: "10px 16px", textAlign: "left", fontSize: 11 }}>Total Clicks</th><th style={{ background: "#2d1a54", color: "#fff", padding: "10px 16px", textAlign: "left", fontSize: 11 }}>Unique Clicks</th></tr></thead>
-                <tbody>{report.urlClicks.map((u, i) => <tr key={i}><td style={{ padding: "10px 16px", borderBottom: "1px solid #e8e0f7", fontSize: 12, color: "#2d1a54", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.url}</td><td style={{ padding: "10px 16px", borderBottom: "1px solid #e8e0f7", fontSize: 12, fontWeight: 600, color: "#4225a6" }}>{u.totalClicks}</td><td style={{ padding: "10px 16px", borderBottom: "1px solid #e8e0f7", fontSize: 12, fontWeight: 600, color: "#4225a6" }}>{u.uniqueClicks}</td></tr>)}</tbody>
-              </table>
-            </>}
-
-            {/* Clickers */}
-            {clickersData?.length > 0 && <>
-              <div style={{ background: "#4225a6", color: "#fff", padding: "10px 20px", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "24px -40px 0", width: "calc(100% + 80px)" }}>Clickers ({clickersData.length})</div>
-              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
-                <thead><tr>{["Email", "Name", "Company", "State", "Career Level"].map(h => <th key={h} style={{ background: "#2d1a54", color: "#fff", padding: "8px 12px", textAlign: "left", fontSize: 10, textTransform: "uppercase" }}>{h}</th>)}</tr></thead>
-                <tbody>{clickersData.slice(0, 30).map((c, i) => <tr key={i}><td style={{ padding: "8px 12px", borderBottom: "1px solid #e8e0f7", fontSize: 11, color: "#4225a6" }}>{c.email}</td><td style={{ padding: "8px 12px", borderBottom: "1px solid #e8e0f7", fontSize: 11 }}>{c.firstName} {c.lastName}</td><td style={{ padding: "8px 12px", borderBottom: "1px solid #e8e0f7", fontSize: 11 }}>{c.company}</td><td style={{ padding: "8px 12px", borderBottom: "1px solid #e8e0f7", fontSize: 11 }}>{c.state}</td><td style={{ padding: "8px 12px", borderBottom: "1px solid #e8e0f7", fontSize: 11 }}>{c.careerLevel}</td></tr>)}</tbody>
-              </table>
-              {clickersData.length > 30 && <p style={{ textAlign: "center", padding: 8, color: "#4225a6", fontSize: 10 }}>Showing 30 of {clickersData.length} clickers</p>}
-            </>}
-
-            {/* AI Notes */}
-            {aiNotes && <>
-              <div style={{ background: "#4225a6", color: "#fff", padding: "10px 20px", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "24px -40px 0", width: "calc(100% + 80px)" }}>AI Insights</div>
-              <div style={{ background: "#f5f2fc", borderLeft: "4px solid #4225a6", padding: "16px 20px", margin: "16px 0", borderRadius: "0 8px 8px 0" }}>
-                <h4 style={{ color: "#4225a6", fontSize: 11, textTransform: "uppercase", marginBottom: 8 }}>Summary</h4>
-                <p style={{ fontSize: 12, lineHeight: 1.6, color: "#2d1a54" }}>{aiNotes.summary}</p>
-              </div>
-              <div style={{ background: "#f5f2fc", borderLeft: "4px solid #6b52c4", padding: "16px 20px", margin: "8px 0", borderRadius: "0 8px 8px 0" }}>
-                <h4 style={{ color: "#4225a6", fontSize: 11, textTransform: "uppercase", marginBottom: 8 }}>Recommendations</h4>
-                {aiNotes.recommendations?.map((r, i) => <div key={i} style={{ display: "flex", gap: 6, marginBottom: 4, fontSize: 12, color: "#2d1a54" }}><CheckCircle size={12} color="#4225a6" style={{ marginTop: 2, flexShrink: 0 }} />{r}</div>)}
-              </div>
-            </>}
-
-            {/* Screenshot */}
-            {screenshot && <>
-              <div style={{ background: "#4225a6", color: "#fff", padding: "10px 20px", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "24px -40px 0", width: "calc(100% + 80px)" }}>Email Preview</div>
-              <div style={{ textAlign: "center", padding: "20px 0" }}><img src={screenshot.data} alt="Email Preview" style={{ maxWidth: "100%", borderRadius: 8, border: "1px solid #d4cbe8" }} /></div>
-            </>}
+          <div>
+            {sections.details && <><SecTitle>Campaign Details</SecTitle><RRow label="Subject Line" value={report.subjectLine}/><RRow label="Send Date and Time" value={report.date}/></>}
+            {sections.core && <><GrpTitle>Core Metrics</GrpTitle><RRow label="Total Recipients" value={report.sends?.toLocaleString()}/><RRow label="Successful Deliveries" value={report.delivered?.toLocaleString()}/></>}
+            {sections.engagement && <><GrpTitle>Engagement</GrpTitle><RRow label="Unique Opens and Open Rate" value={`${report.opens?.toLocaleString()} (${report.openRate}%)`}/><RRow label="Total Opens" value={report.totalOpens?.toLocaleString()}/><RRow label="Unique Clicks and Click Rate" value={`${report.clicks?.toLocaleString()} (${report.clickRate}%)`}/><RRow label="Total Clicks" value={report.totalClicks?.toLocaleString()}/></>}
+            {sections.issues && <><GrpTitle>Issues</GrpTitle><RRow label="Bounces" value={`${report.bounces?.toLocaleString()} (${report.bounceRate||"0"}%)`}/><RRow label="Unsubscribes" value={report.unsubs}/></>}
+            {sections.urls && report.urlClicks?.length > 0 && <><SecTitle>Clicks by URL</SecTitle><div style={{padding:"0 24px"}}><table style={{width:"100%",borderCollapse:"collapse",marginTop:12}}><thead><tr><th style={{background:"#2d1a54",color:"#fff",padding:"10px 16px",textAlign:"left",fontSize:11}}>URL</th><th style={{background:"#2d1a54",color:"#fff",padding:"10px 16px",textAlign:"left",fontSize:11}}>Total</th><th style={{background:"#2d1a54",color:"#fff",padding:"10px 16px",textAlign:"left",fontSize:11}}>Unique</th></tr></thead><tbody>{report.urlClicks.map((u,i)=><tr key={i}><td style={{padding:"10px 16px",borderBottom:"1px solid #e8e0f7",fontSize:12,color:"#2d1a54",maxWidth:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.url}</td><td style={{padding:"10px 16px",borderBottom:"1px solid #e8e0f7",fontWeight:700,color:"#4225a6"}}>{u.totalClicks}</td><td style={{padding:"10px 16px",borderBottom:"1px solid #e8e0f7",color:"#4225a6"}}>{u.uniqueClicks}</td></tr>)}</tbody></table></div></>}
+            {sections.benchmarks && <><SecTitle>Industry Benchmarks</SecTitle><div style={{display:"flex",gap:16,padding:"16px 24px",flexWrap:"wrap"}}>{[{v:"21.0%",l:"Avg Open Rate"},{v:"2.5%",l:"Avg Click Rate"},{v:"2.0%",l:"Avg Bounce Rate"},{v:"0.5%",l:"Avg Unsub Rate"}].map((b,i)=><div key={i} style={{flex:1,minWidth:110,background:"#f5f2fc",borderRadius:10,padding:14,textAlign:"center"}}><div style={{fontSize:20,fontWeight:700,color:"#4225a6"}}>{b.v}</div><div style={{fontSize:10,color:"#6b5f7d",marginTop:4}}>{b.l}</div></div>)}</div><p style={{padding:"4px 24px 16px",fontSize:9,color:"#6b5f7d"}}>Source: Mailchimp Email Marketing Benchmarks (2024)</p></>}
+            {sections.clickers && clickersData?.length > 0 && <><SecTitle>Clickers ({clickersData.length})</SecTitle><div style={{padding:"0 24px"}}><table style={{width:"100%",borderCollapse:"collapse",marginTop:12}}><thead><tr>{["Email","Name","Links Clicked","Times Clicked"].map(h=><th key={h} style={{background:"#2d1a54",color:"#fff",padding:"8px 12px",textAlign:"left",fontSize:10}}>{h}</th>)}</tr></thead><tbody>{clickersData.slice(0,30).map((c,i)=><tr key={i}><td style={{padding:"8px 12px",borderBottom:"1px solid #e8e0f7",fontSize:11,color:"#4225a6"}}>{c.email}</td><td style={{padding:"8px 12px",borderBottom:"1px solid #e8e0f7",fontSize:11}}>{c.firstName} {c.lastName}</td><td style={{padding:"8px 12px",borderBottom:"1px solid #e8e0f7",fontSize:10,color:"#6b5f7d",maxWidth:250,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.linkClicked||"-"}</td><td style={{padding:"8px 12px",borderBottom:"1px solid #e8e0f7",fontSize:11,fontWeight:700,color:"#4225a6"}}>1</td></tr>)}</tbody></table>{clickersData.length>30&&<p style={{textAlign:"center",padding:8,color:"#4225a6",fontSize:10}}>Showing 30 of {clickersData.length}</p>}</div></>}
+            {sections.ai && aiNotes && <><SecTitle>AI Insights</SecTitle><div style={{background:"#f5f2fc",borderLeft:"4px solid #4225a6",padding:"16px 24px",margin:"16px 24px",borderRadius:"0 8px 8px 0"}}><h4 style={{color:"#4225a6",fontSize:11,textTransform:"uppercase",marginBottom:8}}>Summary</h4><p style={{fontSize:12,lineHeight:1.6,color:"#2d1a54"}}>{aiNotes.summary}</p></div><div style={{background:"#f5f2fc",borderLeft:"4px solid #6b52c4",padding:"16px 24px",margin:"8px 24px",borderRadius:"0 8px 8px 0"}}><h4 style={{color:"#4225a6",fontSize:11,textTransform:"uppercase",marginBottom:8}}>Recommendations</h4>{aiNotes.recommendations?.map((r,i)=><div key={i} style={{display:"flex",gap:6,marginBottom:4,fontSize:12,color:"#2d1a54"}}><CheckCircle size={12} color="#4225a6" style={{marginTop:2,flexShrink:0}}/>{r}</div>)}</div></>}
+            {sections.kenn && kennNotes && <><SecTitle>Kenn's Notes</SecTitle><div style={{background:"#fef7f0",borderLeft:"4px solid #f59e0b",padding:"16px 24px",margin:"16px 24px",borderRadius:"0 8px 8px 0"}}><p style={{fontSize:12,lineHeight:1.8,color:"#2d1a54",whiteSpace:"pre-wrap"}}>{kennNotes}</p></div></>}
+            {sections.screenshot && screenshot && <><SecTitle>Email Preview</SecTitle><div style={{textAlign:"center",padding:"20px 24px"}}><img src={screenshot.data} alt="Preview" style={{maxWidth:"100%",borderRadius:8,border:"1px solid #d4cbe8"}}/></div></>}
           </div>
-
-          <div style={{ textAlign: "center", padding: "16px 40px", color: "#4225a6", fontSize: 10, borderTop: "1px solid #e8e0f7" }}>Email Campaign Analytics by kenn.d</div>
+          <div style={{textAlign:"center",padding:"16px 40px",color:"#4225a6",fontSize:10,borderTop:"1px solid #e8e0f7"}}>Email Campaign Analytics by kenn.d</div>
         </div>
-      ) : (
-        <Empty msg="Upload a Mailchimp campaign report above to generate a custom report." />
-      )}
+      ) : <Empty msg="Upload a campaign report above to generate a custom report."/>}
+
+      {/* ===== MULTI-CAMPAIGN REPORT ===== */}
+      <div style={{background:C.white,borderRadius:14,padding:22,border:"1px solid #f0ecf4",marginBottom:20}}>
+        <h3 style={{fontSize:14,fontWeight:700,color:C.dark,marginBottom:4}}>Generate Multi-Campaign Report</h3>
+        <p style={{fontSize:11,color:C.muted,marginBottom:16}}>Upload multiple campaign report CSVs to merge them into a single shareable report (e.g., Supply + Demand for the same campaign).</p>
+        <DropZone label="Add Campaign Report (CSV)" onFile={handleMultiReport} loaded={multiReports.length>0} count={multiReports.length}/>
+        {multiReports.length > 0 && <div style={{marginTop:12}}>
+          <p style={{fontSize:11,fontWeight:600,color:C.dark,marginBottom:8}}>{multiReports.length} campaign(s) loaded:</p>
+          {multiReports.map((r,i) => <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f5f2f8"}}>
+            <div><span style={{fontSize:12,fontWeight:600,color:C.dark}}>{r.title}</span> <Badge color={C.secondary}>{r.openRate}% open</Badge></div>
+            <button onClick={()=>setMultiReports(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:C.muted}}><X size={14}/></button>
+          </div>)}
+          <div style={{marginTop:12}}>
+            <label style={{display:"block",fontSize:10,fontWeight:600,color:C.muted,marginBottom:4,textTransform:"uppercase"}}>Kenn's Notes for Multi-Report</label>
+            <textarea value={multiKennNotes} onChange={e=>setMultiKennNotes(e.target.value)} placeholder="Add notes for the combined report..." rows={2} style={{width:"100%",padding:"10px 14px",borderRadius:9,border:"1px solid #e8e4ee",fontSize:12,outline:"none",resize:"vertical"}}/>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:12}}>
+            <button onClick={()=>dlHTML(multiReports,multiKennNotes,"Multi_Campaign_Report")} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 14px",background:C.secondary,color:"#fff",border:"none",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}><Download size={12}/> Download HTML</button>
+            <button onClick={()=>dlCSV(multiReports,"Multi_Campaign_Report")} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 14px",background:"#f5f2f8",border:"1px solid #e8e4ee",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",color:C.dark}}><Download size={12}/> CSV</button>
+          </div>
+        </div>}
+      </div>
     </div>
   );
 }
