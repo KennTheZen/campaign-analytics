@@ -57,7 +57,7 @@ export default function App(){
   const removeCampaign=(id)=>{const camp=campaigns.find(c=>c.id===id);const nC=campaigns.filter(c=>c.id!==id);const nCl=camp?clickers.filter(c=>!(c.campaignName===camp.name&&c.listName===camp.listName)):clickers;setCampaigns(nC);setClickers(nCl);persist(nC,nCl,emailVisuals,notes)};
   const addClickers=(nc,cn,ln)=>{const d=[...clickers];nc.forEach(n=>{if(!n.email)return;if(!d.find(x=>x.email===n.email&&x.campaignName===cn&&x.listName===ln))d.push({...n,campaignName:cn,listName:ln})});setClickers(d);persist(campaigns,d,emailVisuals,notes)};
 
-  const generateNotes=async(camp)=>{setGenerating(true);try{const cc=clickers.filter(c=>c.campaignName===camp.name);const prompt=`Analyze this email campaign:\nCampaign: ${camp.name}\nType: ${camp.type}\nList: ${camp.listName}\nSubject: ${camp.subjectLine||"N/A"}\nDate: ${camp.date}\nSends: ${camp.sends}, Opens: ${camp.opens} (${camp.openRate?.toFixed(1)}%), Clicks: ${camp.clicks} (${camp.clickRate?.toFixed(1)}%), Bounces: ${camp.bounces}, Unsubs: ${camp.unsubs}\nClickers: ${cc.length}\nTop companies: ${[...new Set(cc.map(c=>c.company).filter(Boolean))].slice(0,10).join(", ")}\n\nReturn JSON only, no markdown: {"summary":"2-3 sentences","trends":["t1","t2","t3"],"recommendations":["r1","r2","r3"]}`;let text="";if(aiConfig.provider==="ollama"){const r=await fetch(`${aiConfig.ollamaUrl}/api/generate`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:aiConfig.ollamaModel,prompt,stream:false})});const d=await r.json();text=d.response||""}else{const h={"Content-Type":"application/json"};if(aiConfig.apiKey)h["x-api-key"]=aiConfig.apiKey;const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:h,body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})});const d=await r.json();text=d.content?.map(c=>c.text||"").join("")||""}const cl=text.replace(/```json|```/g,"").trim();const jm=cl.match(/\{[\s\S]*\}/);const parsed=JSON.parse(jm?jm[0]:cl);const nn={...notes,[camp.id]:parsed};setNotes(nn);persist(campaigns,clickers,emailVisuals,nn)}catch(err){console.error(err);const fb={summary:`${camp.name}: ${camp.openRate?.toFixed(1)}% open, ${camp.clickRate?.toFixed(1)}% click rate.`,trends:["Monitor engagement","Review bounces","Track list health"],recommendations:["A/B test subjects","Segment audience","Optimize timing"]};const nn={...notes,[camp.id]:fb};setNotes(nn);persist(campaigns,clickers,emailVisuals,nn)}setGenerating(false)};
+  const generateNotes=async(camp)=>{setGenerating(true);try{const cc=clickers.filter(c=>c.campaignName===camp.name);const bRate=camp.sends>0?(camp.bounces/camp.sends*100).toFixed(2):"0";const uRate=camp.sends>0?(camp.unsubs/camp.sends*100).toFixed(2):"0";const prompt=`You are an email marketing analyst. Analyze this specific campaign with data-driven insights. Be SPECIFIC - reference actual numbers, compare to industry benchmarks (avg open rate ~20%, avg click rate ~2.5%, avg bounce rate ~2%, avg unsub rate ~0.5%), and explain what the numbers mean.\n\nCampaign: ${camp.name}\nType: ${camp.type}\nList: ${camp.listName}\nSubject: ${camp.subjectLine||"N/A"}\nDate: ${camp.date}\nTotal Recipients: ${camp.sends}\nSuccessful Deliveries: ${camp.delivered||"N/A"}\nOpens: ${camp.opens} (${camp.openRate?.toFixed(1)}% open rate)\nClicks: ${camp.clicks} (${camp.clickRate?.toFixed(1)}% click rate)\nBounces: ${camp.bounces} (${bRate}% bounce rate)\nUnsubscribes: ${camp.unsubs} (${uRate}% unsub rate)\nTotal Clickers in DB: ${cc.length}\nTop companies clicking: ${[...new Set(cc.map(c=>c.company).filter(Boolean))].slice(0,8).join(", ")||"N/A"}\nTop states: ${[...new Set(cc.map(c=>c.state).filter(Boolean))].slice(0,5).join(", ")||"N/A"}\n\nReturn JSON only, no markdown:\n{"summary":"2-3 sentences analyzing performance vs benchmarks with specific numbers","whatWorked":["specific thing that worked with data","another specific positive"],"whatToImprove":["specific improvement with reasoning","another improvement"],"recommendations":["actionable recommendation based on the data","another specific recommendation"]}`; let text="";if(aiConfig.provider==="ollama"){const r=await fetch(aiConfig.ollamaUrl+"/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:aiConfig.ollamaModel,prompt,stream:false})});text=(await r.json()).response||""}else{const h={"Content-Type":"application/json"};if(aiConfig.apiKey)h["x-api-key"]=aiConfig.apiKey;const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:h,body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})});text=(await r.json()).content?.map(c=>c.text||"").join("")||""}const cl=text.replace(/```json|```/g,"").trim();const jm=cl.match(/\{[\s\S]*\}/);const parsed=JSON.parse(jm?jm[0]:cl);const nn={...notes,[camp.id]:parsed};setNotes(nn);persist(campaigns,clickers,emailVisuals,nn)}catch(err){console.error(err);const fb={summary:`${camp.name} achieved ${camp.openRate?.toFixed(1)}% open rate (${camp.openRate>20?"above":"below"} industry avg of ~20%) and ${camp.clickRate?.toFixed(1)}% click rate (${camp.clickRate>2.5?"above":"below"} industry avg of ~2.5%).`,whatWorked:[camp.openRate>20?"Open rate exceeded industry benchmark":"Subject line drove some engagement"],whatToImprove:[camp.clickRate<2.5?"Click rate is below industry average - consider stronger CTAs":"Review content relevance for higher engagement"],recommendations:["A/B test subject lines to optimize opens","Add more compelling CTAs to drive clicks","Segment audience for more targeted content"]};const nn={...notes,[camp.id]:fb};setNotes(nn);persist(campaigns,clickers,emailVisuals,nn)}setGenerating(false)};
   const removeNote=id=>{const nn={...notes};delete nn[id];setNotes(nn);persist(campaigns,clickers,emailVisuals,nn)};
   const clearAll=async()=>{if(confirm("Clear all data?")){setCampaigns([]);setClickers([]);setEmailVisuals([]);setNotes({});await clearAllData()}};
 
@@ -198,26 +198,96 @@ function ClicksTab({campaigns,clickers,aiConfig}){
     filtered.map(c => {const cm = contactMap[c.email]; return [c.email,c.firstName,c.lastName,c.company,c.accountName,c.state,c.careerLevel,c.department,c.contactType,c.region,c.campaignName,c.listName,c.linkClicked,cm?cm.campaigns.size:1]}),"clickers");
   };
 
-  // Click report analyzer
+  // Click report analyzer - handles both Field,Value format and tabular clicker CSVs
   const handleAnalyzerUpload = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const rows = parseCSV(e.target.result);
-      const mapped = rows.map(r => mapClickerRow(r)).filter(c => c.email);
-      const urlMap = {};
-      const clickerMap = {};
-      mapped.forEach(c => {
-        if (c.linkClicked) urlMap[c.linkClicked] = (urlMap[c.linkClicked]||0) + 1;
-        if (!clickerMap[c.email]) clickerMap[c.email] = {email:c.email,firstName:c.firstName,lastName:c.lastName,company:c.company||c.holdingCompany,careerLevel:c.careerLevel,clicks:0,links:new Set()};
-        clickerMap[c.email].clicks++;
-        if (c.linkClicked) clickerMap[c.email].links.add(c.linkClicked);
-      });
-      const topUrls = Object.entries(urlMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
-      const topClickers = Object.values(clickerMap).sort((a,b)=>b.clicks-a.clicks).slice(0,20).map(c=>({...c,links:[...c.links]}));
-      const uniqueEmails = new Set(mapped.map(c=>c.email)).size;
-      setAnalyzerData({total:mapped.length,unique:uniqueEmails,topUrls,topClickers,fileName:file.name});
+      const text = e.target.result;
+      const rows = parseCSV(text);
+      if (!rows.length) return;
+      
+      // Check if it's a Field,Value campaign report format
+      const firstKeys = Object.keys(rows[0]).map(k => k.toLowerCase().trim());
+      const isFieldValue = firstKeys.includes("field") && firstKeys.includes("value");
+      
+      if (isFieldValue) {
+        // Parse Field,Value format campaign report
+        const kv = {};
+        const urls = [];
+        let inUrls = false;
+        rows.forEach(r => {
+          const field = (r["Field"] || r["field"] || "").trim();
+          const value = (r["Value"] || r["value"] || "").trim();
+          const col3 = Object.values(r)[2] || "";
+          if (field === "URL") { inUrls = true; return; }
+          if (inUrls && field.startsWith("http")) {
+            urls.push({url: field, totalClicks: parseInt(value.replace(/,/g,""))||0, uniqueClicks: parseInt(String(col3).replace(/,/g,""))||0});
+            return;
+          }
+          if (field) kv[field.toLowerCase()] = value;
+        });
+        const totalClicks = parseInt((kv["total clicks"]||"0").replace(/,/g,""))||0;
+        const uniqueClickers = parseInt((kv["unique clicks"]||"0").replace(/,/g,""))||0;
+        setAnalyzerData({
+          total: totalClicks,
+          unique: uniqueClickers,
+          topUrls: urls.map(u => [u.url, u.totalClicks, u.uniqueClicks]),
+          topClickers: [],
+          fileName: file.name,
+          title: kv["title"] || file.name,
+          isReport: true,
+          reportData: kv,
+        });
+      } else {
+        // Tabular clicker CSV
+        const mapped = rows.map(r => mapClickerRow(r)).filter(c => c.email);
+        const urlMap = {};
+        const clickerMap = {};
+        mapped.forEach(c => {
+          if (c.linkClicked) urlMap[c.linkClicked] = (urlMap[c.linkClicked]||0) + 1;
+          if (!clickerMap[c.email]) clickerMap[c.email] = {email:c.email,firstName:c.firstName,lastName:c.lastName,company:c.company||c.holdingCompany,careerLevel:c.careerLevel,clicks:0,links:new Set()};
+          clickerMap[c.email].clicks++;
+          if (c.linkClicked) clickerMap[c.email].links.add(c.linkClicked);
+        });
+        const topUrls = Object.entries(urlMap).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([url,count])=>[url,count,0]);
+        const topClickers = Object.values(clickerMap).sort((a,b)=>b.clicks-a.clicks).slice(0,20).map(c=>({...c,links:[...c.links]}));
+        const totalClickSum = Object.values(clickerMap).reduce((s,c)=>s+c.clicks,0);
+        setAnalyzerData({total:totalClickSum,unique:Object.keys(clickerMap).length,topUrls,topClickers,fileName:file.name,isReport:false});
+      }
     };
     reader.readAsText(file);
+  };
+
+  const exportAnalyzer = (format) => {
+    if (!analyzerData) return;
+    if (format === "csv") {
+      const rows = [["Metric","Value"],["Total Clicks",analyzerData.total],["Unique Clickers",analyzerData.unique],["",""]];
+      if (analyzerData.topUrls.length) { rows.push(["URL","Total Clicks","Unique Clicks"]); analyzerData.topUrls.forEach(u => rows.push(u)); }
+      if (analyzerData.topClickers.length) { rows.push(["",""],["Email","Name","Company","Times Clicked"]); analyzerData.topClickers.forEach(c => rows.push([c.email,c.firstName+" "+c.lastName,c.company,c.clicks])); }
+      downloadCSVData(rows[0],rows.slice(1),(analyzerData.title||"click_analysis").replace(/[^a-zA-Z0-9]/g,"_"));
+    } else if (format === "html") {
+      const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:DM Sans,sans-serif;background:#f5f2fc;padding:40px}' +
+        '.page{max-width:700px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(45,26,84,.1)}' +
+        '.hdr{background:linear-gradient(135deg,#2d1a54,#4225a6);padding:30px;text-align:center;color:#fff}' +
+        '.hdr h1{font-size:20px;margin-bottom:4px}.hdr p{font-size:12px;opacity:.7}' +
+        '.s{padding:20px 30px}.st{background:#4225a6;color:#fff;padding:10px 20px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}' +
+        '.r{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #e8e0f7;font-size:13px}' +
+        '.r .l{color:#2d1a54;font-weight:600}.r .v{color:#4225a6;font-weight:700}' +
+        'table{width:100%;border-collapse:collapse;margin:12px 0}th{background:#2d1a54;color:#fff;padding:8px 12px;text-align:left;font-size:11px}' +
+        'td{padding:8px 12px;border-bottom:1px solid #e8e0f7;font-size:12px;color:#2d1a54}' +
+        '.ft{text-align:center;padding:16px;color:#4225a6;font-size:10px;border-top:1px solid #e8e0f7}</style></head><body><div class="page">' +
+        '<div class="hdr"><h1>Click Report Analysis</h1><p>' + (analyzerData.title||analyzerData.fileName) + '</p></div>' +
+        '<div class="s"><div class="st">Summary</div>' +
+        '<div class="r"><span class="l">Total Clicks</span><span class="v">' + analyzerData.total + '</span></div>' +
+        '<div class="r"><span class="l">Unique Clickers</span><span class="v">' + analyzerData.unique + '</span></div></div>' +
+        (analyzerData.topUrls.length ? '<div class="s"><div class="st">Top URLs</div><table><thead><tr><th>URL</th><th>Clicks</th></tr></thead><tbody>' +
+        analyzerData.topUrls.map(u => '<tr><td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + u[0] + '</td><td style="font-weight:700;color:#4225a6">' + u[1] + '</td></tr>').join('') + '</tbody></table></div>' : '') +
+        (analyzerData.topClickers.length ? '<div class="s"><div class="st">Top Clickers</div><table><thead><tr><th>Email</th><th>Name</th><th>Company</th><th>Clicks</th></tr></thead><tbody>' +
+        analyzerData.topClickers.map(c => '<tr><td>' + c.email + '</td><td>' + c.firstName + ' ' + c.lastName + '</td><td>' + c.company + '</td><td style="font-weight:700">' + c.clicks + '</td></tr>').join('') + '</tbody></table></div>' : '') +
+        '<div class="ft">Email Campaign Analytics by kenn.d</div></div></body></html>';
+      const blob = new Blob([html], {type:"text/html"});
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (analyzerData.title||"click_analysis").replace(/[^a-zA-Z0-9]/g,"_") + ".html"; a.click();
+    }
   };
 
   // AI chat for clicker database
@@ -291,7 +361,20 @@ function ClicksTab({campaigns,clickers,aiConfig}){
     </div>
   )}
 
-  {/* Clicker Database - paginated */}
+  {/* Ask AI About Clickers - BEFORE the database */}
+  <div style={{background:C.white,borderRadius:14,padding:18,border:"1px solid #f0ecf4",marginBottom:20}}>
+    <h3 style={{fontSize:13,fontWeight:700,color:C.dark,marginBottom:4}}>Ask AI About Clickers</h3>
+    <p style={{fontSize:11,color:C.muted,marginBottom:12}}>Ask questions like "Which contacts clicked in multiple campaigns?" or "What companies have the most clickers?"</p>
+    <div style={{display:"flex",gap:8,marginBottom:12}}>
+      <input value={aiQ} onChange={e=>setAiQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&askAI()} placeholder="Ask a question about your clicker data..." style={{flex:1,padding:"10px 14px",borderRadius:9,border:"1px solid #e8e4ee",fontSize:12,outline:"none"}}/>
+      <button onClick={askAI} disabled={aiLoading} style={{padding:"10px 18px",background:aiLoading?C.muted:`linear-gradient(135deg, ${C.primary}, ${C.secondary})`,color:"#fff",border:"none",borderRadius:9,fontSize:12,fontWeight:600,cursor:aiLoading?"default":"pointer"}}>
+        {aiLoading ? "Thinking..." : "Ask"}
+      </button>
+    </div>
+    {aiA && <div style={{background:"#f5f2fc",borderLeft:"4px solid "+C.secondary,padding:"14px 18px",borderRadius:"0 8px 8px 0",fontSize:12,lineHeight:1.7,color:C.dark,whiteSpace:"pre-wrap"}}>{aiA}</div>}
+  </div>
+
+  {/* Clicker Database - paginated with top+bottom controls */}
   <div style={{background:C.white,borderRadius:14,padding:18,border:"1px solid #f0ecf4",marginBottom:20}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
       <h3 style={{fontSize:13,fontWeight:700,color:C.dark}}>Clicker Database ({filtered.length} records)</h3>
@@ -300,6 +383,12 @@ function ClicksTab({campaigns,clickers,aiConfig}){
         <button onClick={expCSV} style={{display:"flex",alignItems:"center",gap:4,padding:"7px 12px",background:C.secondary,color:"#fff",border:"none",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}><Download size={11}/> Export All</button>
       </div>
     </div>
+    {/* Top pagination */}
+    {totalPages > 1 && <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8,padding:"8px 0",marginBottom:8,borderBottom:"1px solid #f5f2f8"}}>
+      <button onClick={()=>setPage(Math.max(0,page-1))} disabled={page===0} style={{padding:"5px 10px",borderRadius:6,border:"1px solid #e8e4ee",background:page===0?"#f5f2f8":C.white,color:page===0?C.muted:C.dark,fontSize:10,cursor:page===0?"default":"pointer"}}>Prev</button>
+      <span style={{fontSize:10,color:C.muted}}>Page {page+1} of {totalPages} ({filtered.length} total)</span>
+      <button onClick={()=>setPage(Math.min(totalPages-1,page+1))} disabled={page>=totalPages-1} style={{padding:"5px 10px",borderRadius:6,border:"1px solid #e8e4ee",background:page>=totalPages-1?"#f5f2f8":C.white,color:page>=totalPages-1?C.muted:C.dark,fontSize:10,cursor:page>=totalPages-1?"default":"pointer"}}>Next</button>
+    </div>}
     <div style={{overflowX:"auto"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
         <thead><tr style={{borderBottom:"2px solid #f0ecf4"}}>
@@ -332,19 +421,6 @@ function ClicksTab({campaigns,clickers,aiConfig}){
     </div>}
   </div>
 
-  {/* AI Chat for Clicker Database */}
-  <div style={{background:C.white,borderRadius:14,padding:18,border:"1px solid #f0ecf4",marginBottom:20}}>
-    <h3 style={{fontSize:13,fontWeight:700,color:C.dark,marginBottom:4}}>Ask AI About Clickers</h3>
-    <p style={{fontSize:11,color:C.muted,marginBottom:12}}>Ask questions like "Which contacts clicked in multiple campaigns?" or "What companies have the most clickers?"</p>
-    <div style={{display:"flex",gap:8,marginBottom:12}}>
-      <input value={aiQ} onChange={e=>setAiQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&askAI()} placeholder="Ask a question about your clicker data..." style={{flex:1,padding:"10px 14px",borderRadius:9,border:"1px solid #e8e4ee",fontSize:12,outline:"none"}}/>
-      <button onClick={askAI} disabled={aiLoading} style={{padding:"10px 18px",background:aiLoading?C.muted:`linear-gradient(135deg, ${C.primary}, ${C.secondary})`,color:"#fff",border:"none",borderRadius:9,fontSize:12,fontWeight:600,cursor:aiLoading?"default":"pointer"}}>
-        {aiLoading ? "Thinking..." : "Ask"}
-      </button>
-    </div>
-    {aiA && <div style={{background:"#f5f2fc",borderLeft:"4px solid "+C.secondary,padding:"14px 18px",borderRadius:"0 8px 8px 0",fontSize:12,lineHeight:1.7,color:C.dark,whiteSpace:"pre-wrap"}}>{aiA}</div>}
-  </div>
-
   {/* Click Report Analyzer */}
   <div style={{background:C.white,borderRadius:14,padding:18,border:"1px solid #f0ecf4"}}>
     <h3 style={{fontSize:13,fontWeight:700,color:C.dark,marginBottom:4}}>Click Report Analyzer</h3>
@@ -352,16 +428,24 @@ function ClicksTab({campaigns,clickers,aiConfig}){
     <DropZone label="Upload Click Report (CSV)" onFile={handleAnalyzerUpload} loaded={!!analyzerData} count={analyzerData?.total}/>
 
     {analyzerData && <div style={{marginTop:16}}>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:12,marginBottom:16}}>
-        <KPI label="Total Clicks" value={analyzerData.total.toLocaleString()} icon={MousePointerClick} color={C.primary}/>
-        <KPI label="Unique Clickers" value={analyzerData.unique.toLocaleString()} icon={Users} color={C.secondary}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:12,flex:1}}>
+          <KPI label="Total Clicks" value={analyzerData.total.toLocaleString()} icon={MousePointerClick} color={C.primary}/>
+          <KPI label="Unique Clickers" value={analyzerData.unique.toLocaleString()} icon={Users} color={C.secondary}/>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        <button onClick={()=>exportAnalyzer("csv")} style={{display:"flex",alignItems:"center",gap:4,padding:"7px 12px",background:"#f5f2f8",border:"1px solid #e8e4ee",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",color:C.dark}}><Download size={11}/> CSV</button>
+        <button onClick={()=>exportAnalyzer("html")} style={{display:"flex",alignItems:"center",gap:4,padding:"7px 12px",background:C.secondary,color:"#fff",border:"none",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}><Download size={11}/> HTML</button>
+        <button onClick={()=>downloadPNG("analyzer-output",(analyzerData.title||"analysis").replace(/[^a-zA-Z0-9]/g,"_"))} style={{display:"flex",alignItems:"center",gap:4,padding:"7px 12px",background:"#f5f2f8",border:"1px solid #e8e4ee",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",color:C.dark}}><Download size={11}/> PNG</button>
       </div>
 
+      <div id="analyzer-output">
       {analyzerData.topUrls.length > 0 && <div style={{marginBottom:16}}>
         <h4 style={{fontSize:12,fontWeight:700,color:C.dark,marginBottom:8}}>Top URLs Clicked</h4>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-          <thead><tr style={{borderBottom:"2px solid #f0ecf4"}}><th style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10}}>URL</th><th style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10}}>CLICKS</th></tr></thead>
-          <tbody>{analyzerData.topUrls.map(([url,count],i) => <tr key={i} style={{borderBottom:"1px solid #f8f6fa"}}><td style={{padding:"7px 8px",color:C.secondary,fontSize:10,maxWidth:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{url}</td><td style={{padding:"7px 8px",fontWeight:700,color:C.primary}}>{count}</td></tr>)}</tbody>
+          <thead><tr style={{borderBottom:"2px solid #f0ecf4"}}><th style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10}}>URL</th><th style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10}}>TOTAL CLICKS</th>{analyzerData.isReport&&<th style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10}}>UNIQUE CLICKS</th>}</tr></thead>
+          <tbody>{analyzerData.topUrls.map((u,i) => <tr key={i} style={{borderBottom:"1px solid #f8f6fa"}}><td style={{padding:"7px 8px",color:C.secondary,fontSize:10,maxWidth:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u[0]}</td><td style={{padding:"7px 8px",fontWeight:700,color:C.primary}}>{u[1]}</td>{analyzerData.isReport&&<td style={{padding:"7px 8px",fontWeight:600,color:C.muted}}>{u[2]}</td>}</tr>)}</tbody>
         </table>
       </div>}
 
@@ -372,6 +456,7 @@ function ClicksTab({campaigns,clickers,aiConfig}){
           <tbody>{analyzerData.topClickers.map((c,i) => <tr key={i} style={{borderBottom:"1px solid #f8f6fa"}}><td style={{padding:"7px 8px",color:C.secondary,fontWeight:500}}>{c.email}</td><td style={{padding:"7px 8px"}}>{c.firstName} {c.lastName}</td><td style={{padding:"7px 8px"}}>{c.company}</td><td style={{padding:"7px 8px"}}>{c.careerLevel}</td><td style={{padding:"7px 8px",fontWeight:700,color:C.primary}}>{c.clicks}</td><td style={{padding:"7px 8px",fontSize:10,color:C.muted}}>{c.links.slice(0,2).join(", ")}{c.links.length>2?` +${c.links.length-2}`:""}</td></tr>)}</tbody>
         </table></div>
       </div>}
+      </div>
     </div>}
   </div>
   </div>}
@@ -382,7 +467,7 @@ function VisualsTab({campaigns,emailVisuals,setEmailVisuals}){const[sc,setSc]=us
 function VCard({camp,vis,hImg,rm}){const ref=useRef(null);return <div style={{background:C.white,borderRadius:14,padding:16,border:"1px solid #f0ecf4",marginBottom:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div><span style={{fontSize:12,fontWeight:700,color:C.dark}}>{camp.name}</span> <Badge color={C.secondary}>{camp.listName}</Badge></div><div style={{display:"flex",gap:6,alignItems:"center"}}><span style={{fontSize:10,color:C.muted}}>{vis.length} items</span><input ref={ref} type="file" accept="image/*" style={{display:"none"}} onChange={e=>e.target.files[0]&&hImg(e.target.files[0],camp.name)}/><button onClick={()=>ref.current?.click()} style={{display:"flex",alignItems:"center",gap:3,padding:"5px 10px",background:C.bg3,border:"none",borderRadius:6,fontSize:10,fontWeight:600,cursor:"pointer",color:C.dark}}><Image size={11}/> Upload Screenshot</button></div></div>{vis.length===0?<p style={{fontSize:11,color:C.muted,padding:"8px 0"}}>No previews.</p>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))",gap:8}}>{vis.map(v=><div key={v.id} style={{border:"1px solid #eee",borderRadius:8,padding:10,position:"relative"}}>{v.type==="image"?<div><img src={v.value} alt={v.fileName} style={{width:"100%",borderRadius:5,marginBottom:4}}/><p style={{fontSize:10,color:C.muted}}>{v.fileName}</p></div>:<a href={v.value} target="_blank" rel="noopener" style={{display:"flex",alignItems:"center",gap:5,color:C.secondary,fontSize:11,fontWeight:500,textDecoration:"none"}}><ExternalLink size={12}/> View Preview</a>}<button onClick={()=>rm(v.id)} style={{position:"absolute",top:5,right:5,background:"#fff",border:"1px solid #eee",borderRadius:4,cursor:"pointer",color:C.muted,padding:2}}><X size={11}/></button></div>)}</div>}</div>}
 
 // ========= TAB: AI NOTES =========
-function NotesTab({campaigns,notes,generateNotes,generating,removeNote}){const[tf,setTf]=useState("");const[lf,setLf]=useState("");const allL=[...new Set(campaigns.map(c=>c.listName).filter(Boolean))];const filtered=useMemo(()=>{let c=[...campaigns];if(tf)c=c.filter(x=>x.type===tf);if(lf)c=c.filter(x=>x.listName===lf);return c},[campaigns,tf,lf]);if(campaigns.length===0)return <Empty msg="Upload campaign data to generate AI insights."/>;return <div style={{animation:"fadeIn .3s ease"}}><div style={{background:"#fef7f0",borderRadius:10,padding:14,marginBottom:18,border:"1px solid #fde8d0"}}><p style={{fontSize:12,color:"#92400e",lineHeight:1.6}}><strong>How AI Notes work:</strong> Go to <strong>AI Settings</strong> in the header to switch between Anthropic (Claude) and Ollama (local/offline). Notes persist across sessions.</p></div><div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase"}}>Filter:</span><Sel value={tf} onChange={setTf} options={CAMPAIGN_TYPES.filter(t=>t!=="Pub Comms")} placeholder="All Types"/><Sel value={lf} onChange={setLf} options={allL} placeholder="All Lists"/>{(tf||lf)&&<button onClick={()=>{setTf("");setLf("")}} style={{fontSize:11,color:C.primary,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Clear</button>}</div><div style={{display:"grid",gap:14}}>{filtered.map((camp,i)=>{const note=notes[camp.id];const nid=`note-${camp.id}`;return <div key={i} id={nid} style={{background:C.white,borderRadius:14,padding:20,border:"1px solid #f0ecf4"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}><div><h3 style={{fontSize:14,fontWeight:700,color:C.dark,marginBottom:4}}>{camp.name}</h3><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><Badge color={C.secondary}>{camp.type}</Badge><Badge color="#7c3aed">{camp.listName}</Badge><Badge color={C.success}>Opens: {camp.openRate?.toFixed(1)}%</Badge><Badge color={C.primary}>Clicks: {camp.clickRate?.toFixed(1)}%</Badge></div></div><div style={{display:"flex",gap:6}}>{note&&<><DlBtn id={nid} name={`notes_${camp.name.replace(/[^a-zA-Z0-9]/g,"_")}`}/><button onClick={()=>{if(confirm("Remove notes?"))removeNote(camp.id)}} style={{display:"flex",alignItems:"center",gap:3,padding:"4px 8px",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:6,fontSize:10,cursor:"pointer",color:C.danger,fontWeight:600}}><Trash2 size={11}/></button></>}<button onClick={()=>generateNotes(camp)} disabled={generating} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 14px",background:generating?C.muted:`linear-gradient(135deg, ${C.primary}, ${C.secondary})`,color:"#fff",border:"none",borderRadius:9,fontSize:11,fontWeight:600,cursor:generating?"default":"pointer",whiteSpace:"nowrap"}}>{generating?<div style={{width:12,height:12,border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin .6s linear infinite"}}/>:<Brain size={13}/>}{note?"Regenerate":"Generate"}</button></div></div>{note?<div style={{animation:"slideUp .3s ease"}}><div style={{background:"#faf8fc",borderRadius:10,padding:14,marginBottom:10,borderLeft:`3px solid ${C.primary}`}}><h4 style={{fontSize:10,fontWeight:700,color:C.primary,marginBottom:5,textTransform:"uppercase"}}>Summary</h4><p style={{fontSize:12,color:C.dark,lineHeight:1.6}}>{note.summary}</p></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div style={{background:"#f7f5fa",borderRadius:10,padding:12}}><h4 style={{fontSize:10,fontWeight:700,color:C.secondary,marginBottom:6,textTransform:"uppercase"}}>Trends</h4>{note.trends?.map((t,j)=><div key={j} style={{display:"flex",gap:5,marginBottom:5,fontSize:11,color:C.dark,lineHeight:1.5}}><TrendingUp size={12} color={C.secondary} style={{marginTop:1,flexShrink:0}}/>{t}</div>)}</div><div style={{background:"#fef7f0",borderRadius:10,padding:12}}><h4 style={{fontSize:10,fontWeight:700,color:C.warning,marginBottom:6,textTransform:"uppercase"}}>Recommendations</h4>{note.recommendations?.map((r,j)=><div key={j} style={{display:"flex",gap:5,marginBottom:5,fontSize:11,color:C.dark,lineHeight:1.5}}><CheckCircle size={12} color={C.success} style={{marginTop:1,flexShrink:0}}/>{r}</div>)}</div></div></div>:<div style={{textAlign:"center",padding:"16px 0",color:C.muted}}><Brain size={24} style={{opacity:.2,marginBottom:4}}/><p style={{fontSize:11}}>Click "Generate" for AI insights</p></div>}</div>})}</div></div>}
+function NotesTab({campaigns,notes,generateNotes,generating,removeNote}){const[tf,setTf]=useState("");const[lf,setLf]=useState("");const allL=[...new Set(campaigns.map(c=>c.listName).filter(Boolean))];const filtered=useMemo(()=>{let c=[...campaigns];if(tf)c=c.filter(x=>x.type===tf);if(lf)c=c.filter(x=>x.listName===lf);return c},[campaigns,tf,lf]);if(campaigns.length===0)return <Empty msg="Upload campaign data to generate AI insights."/>;return <div style={{animation:"fadeIn .3s ease"}}><div style={{background:"#fef7f0",borderRadius:10,padding:14,marginBottom:18,border:"1px solid #fde8d0"}}><p style={{fontSize:12,color:"#92400e",lineHeight:1.6}}><strong>How AI Notes work:</strong> Go to <strong>AI Settings</strong> in the header to switch between Anthropic (Claude) and Ollama (local/offline). Notes persist across sessions.</p></div><div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase"}}>Filter:</span><Sel value={tf} onChange={setTf} options={CAMPAIGN_TYPES.filter(t=>t!=="Pub Comms")} placeholder="All Types"/><Sel value={lf} onChange={setLf} options={allL} placeholder="All Lists"/>{(tf||lf)&&<button onClick={()=>{setTf("");setLf("")}} style={{fontSize:11,color:C.primary,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Clear</button>}</div><div style={{display:"grid",gap:14}}>{filtered.map((camp,i)=>{const note=notes[camp.id];const nid=`note-${camp.id}`;return <div key={i} id={nid} style={{background:C.white,borderRadius:14,padding:20,border:"1px solid #f0ecf4"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}><div><h3 style={{fontSize:14,fontWeight:700,color:C.dark,marginBottom:4}}>{camp.name}</h3><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><Badge color={C.secondary}>{camp.type}</Badge><Badge color="#7c3aed">{camp.listName}</Badge><Badge color={C.success}>Opens: {camp.openRate?.toFixed(1)}%</Badge><Badge color={C.primary}>Clicks: {camp.clickRate?.toFixed(1)}%</Badge></div></div><div style={{display:"flex",gap:6}}>{note&&<><DlBtn id={nid} name={`notes_${camp.name.replace(/[^a-zA-Z0-9]/g,"_")}`}/><button onClick={()=>{if(confirm("Remove notes?"))removeNote(camp.id)}} style={{display:"flex",alignItems:"center",gap:3,padding:"4px 8px",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:6,fontSize:10,cursor:"pointer",color:C.danger,fontWeight:600}}><Trash2 size={11}/></button></>}<button onClick={()=>generateNotes(camp)} disabled={generating} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 14px",background:generating?C.muted:`linear-gradient(135deg, ${C.primary}, ${C.secondary})`,color:"#fff",border:"none",borderRadius:9,fontSize:11,fontWeight:600,cursor:generating?"default":"pointer",whiteSpace:"nowrap"}}>{generating?<div style={{width:12,height:12,border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin .6s linear infinite"}}/>:<Brain size={13}/>}{note?"Regenerate":"Generate"}</button></div></div>{note?<div style={{animation:"slideUp .3s ease"}}><div style={{background:"#faf8fc",borderRadius:10,padding:14,marginBottom:10,borderLeft:`3px solid ${C.primary}`}}><h4 style={{fontSize:10,fontWeight:700,color:C.primary,marginBottom:5,textTransform:"uppercase"}}>Summary</h4><p style={{fontSize:12,color:C.dark,lineHeight:1.6}}>{note.summary}</p></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div style={{background:"#f0fdf4",borderRadius:10,padding:12}}><h4 style={{fontSize:10,fontWeight:700,color:C.success,marginBottom:6,textTransform:"uppercase"}}>What Worked</h4>{(note.whatWorked||note.trends||[]).map((t,j)=><div key={j} style={{display:"flex",gap:5,marginBottom:5,fontSize:11,color:C.dark,lineHeight:1.5}}><CheckCircle size={12} color={C.success} style={{marginTop:1,flexShrink:0}}/>{t}</div>)}</div><div style={{background:"#fef7f0",borderRadius:10,padding:12}}><h4 style={{fontSize:10,fontWeight:700,color:C.warning,marginBottom:6,textTransform:"uppercase"}}>What Could Improve</h4>{(note.whatToImprove||[]).map((t,j)=><div key={j} style={{display:"flex",gap:5,marginBottom:5,fontSize:11,color:C.dark,lineHeight:1.5}}><AlertTriangle size={12} color={C.warning} style={{marginTop:1,flexShrink:0}}/>{t}</div>)}</div></div>{note.recommendations&&<div style={{background:"#f5f2fc",borderRadius:10,padding:12,marginTop:10}}><h4 style={{fontSize:10,fontWeight:700,color:C.secondary,marginBottom:6,textTransform:"uppercase"}}>Recommendations</h4>{note.recommendations.map((r,j)=><div key={j} style={{display:"flex",gap:5,marginBottom:5,fontSize:11,color:C.dark,lineHeight:1.5}}><TrendingUp size={12} color={C.secondary} style={{marginTop:1,flexShrink:0}}/>{r}</div>)}</div>}</div>:<div style={{textAlign:"center",padding:"16px 0",color:C.muted}}><Brain size={24} style={{opacity:.2,marginBottom:4}}/><p style={{fontSize:11}}>Click "Generate" for AI insights</p></div>}</div>})}</div></div>}
 
 // ========= TAB: CUSTOM ANALYSIS =========
 function CustomAnalysisTab({campaigns,clickers}){const[sT,setST]=useState([]);const[sL,setSL]=useState([]);const[cf,setCf]=useState("company");const allL=[...new Set(campaigns.map(c=>c.listName).filter(Boolean))];const allT=[...new Set(campaigns.map(c=>c.type))];const tT=t=>setST(p=>p.includes(t)?p.filter(x=>x!==t):[...p,t]);const tL=l=>setSL(p=>p.includes(l)?p.filter(x=>x!==l):[...p,l]);const merged=useMemo(()=>{let c=[...campaigns];if(sT.length)c=c.filter(x=>sT.includes(x.type));if(sL.length)c=c.filter(x=>sL.includes(x.listName));return c},[campaigns,sT,sL]);const mCl=useMemo(()=>{const k=new Set(merged.map(c=>`${c.name}||${c.listName}`));return clickers.filter(c=>k.has(`${c.campaignName}||${c.listName}`))},[clickers,merged]);const tot={sends:0,opens:0,clicks:0};merged.forEach(c=>{tot.sends+=c.sends||0;tot.opens+=c.opens||0;tot.clicks+=c.clicks||0});const fd=useMemo(()=>{const m={};mCl.forEach(c=>{const v=c[cf];if(v)m[v]=(m[v]||0)+1});return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,10)},[mCl,cf]);const cd=merged.map(c=>({name:(c.name||"").slice(0,14),openRate:c.openRate||0,clickRate:c.clickRate||0}));
