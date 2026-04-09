@@ -48,10 +48,10 @@ function ListPicker({campaignType,value,onChange}){const[manual,setManual]=useSt
 
 // ========= MAIN APP =========
 export default function App(){
-  const[tab,setTab]=useState(0);const[campaigns,setCampaigns]=useState([]);const[clickers,setClickers]=useState([]);const[emailVisuals,setEmailVisuals]=useState([]);const[notes,setNotes]=useState({});const[loading,setLoading]=useState(true);const[showUpload,setShowUpload]=useState(false);const[generating,setGenerating]=useState(false);const[showSettings,setShowSettings]=useState(false);const[aiConfig,setAiConfig]=useState({provider:"anthropic",apiKey:"",ollamaUrl:"http://localhost:11434",ollamaModel:"llama3"});
+  const[tab,setTab]=useState(0);const[campaigns,setCampaigns]=useState([]);const[clickers,setClickers]=useState([]);const[emailVisuals,setEmailVisuals]=useState([]);const[notes,setNotes]=useState({});const[loading,setLoading]=useState(true);const[showUpload,setShowUpload]=useState(false);const[generating,setGenerating]=useState(false);const[showSettings,setShowSettings]=useState(false);const[showHistory,setShowHistory]=useState(false);const[aiConfig,setAiConfig]=useState({provider:"anthropic",apiKey:"",ollamaUrl:"http://localhost:11434",ollamaModel:"llama3"});const[uploadLog,setUploadLog]=useState([]);
 
-  useEffect(()=>{(async()=>{const d=await loadData();if(d){setCampaigns(d.campaigns||[]);setClickers(d.clickers||[]);setEmailVisuals(d.emailVisuals||[]);setNotes(d.notes||{});if(d.aiConfig)setAiConfig(d.aiConfig)}setLoading(false)})()},[]);
-  const persist=useCallback(async(c,cl,ev,n,ac)=>{await saveData({campaigns:c,clickers:cl,emailVisuals:ev,notes:n,aiConfig:ac||aiConfig})},[aiConfig]);
+  useEffect(()=>{(async()=>{const d=await loadData();if(d){setCampaigns(d.campaigns||[]);setClickers(d.clickers||[]);setEmailVisuals(d.emailVisuals||[]);setNotes(d.notes||{});if(d.aiConfig)setAiConfig(d.aiConfig);if(d.uploadLog)setUploadLog(d.uploadLog)}setLoading(false)})()},[]);
+  const persist=useCallback(async(c,cl,ev,n,ac,ul)=>{await saveData({campaigns:c,clickers:cl,emailVisuals:ev,notes:n,aiConfig:ac||aiConfig,uploadLog:ul||uploadLog})},[aiConfig,uploadLog]);
 
   const addCampaign=(camp)=>{const next=[...campaigns];const ex=next.findIndex(c=>c.name===camp.name&&c.type===camp.type&&c.listName===camp.listName);if(ex>=0){const e=next[ex];e.sends=(e.sends||0)+(camp.sends||0);e.opens=(e.opens||0)+(camp.opens||0);e.clicks=(e.clicks||0)+(camp.clicks||0);e.bounces=(e.bounces||0)+(camp.bounces||0);e.unsubs=(e.unsubs||0)+(camp.unsubs||0);if(camp.openRate)e.openRate=camp.openRate;if(camp.clickRate)e.clickRate=camp.clickRate;if(camp.bounceRate)e.bounceRate=camp.bounceRate;if(camp.subjectLine)e.subjectLine=camp.subjectLine;if(camp.date)e.date=camp.date;next[ex]=e}else{next.push({...camp,id:Date.now().toString()+Math.random().toString(36).slice(2,6)})}setCampaigns(next);persist(next,clickers,emailVisuals,notes)};
   const removeCampaign=(id)=>{const camp=campaigns.find(c=>c.id===id);const nC=campaigns.filter(c=>c.id!==id);const nCl=camp?clickers.filter(c=>!(c.campaignName===camp.name&&c.listName===camp.listName)):clickers;setCampaigns(nC);setClickers(nCl);persist(nC,nCl,emailVisuals,notes)};
@@ -72,19 +72,20 @@ export default function App(){
   return(
     <div style={{minHeight:"100vh",background:C.bg2,fontFamily:"'DM Sans',sans-serif"}}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}*{box-sizing:border-box;margin:0;padding:0}input,select,textarea,button{font-family:'DM Sans',sans-serif}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:${C.bg3};border-radius:3px}`}</style>
-      <header style={{background:`linear-gradient(135deg, ${C.dark} 0%, ${C.secondary} 100%)`,padding:"22px 28px 20px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{width:42,height:42,borderRadius:12,background:C.primary,display:"flex",alignItems:"center",justifyContent:"center"}}><Mail size={20} color="#fff"/></div><div><h1 style={{fontSize:20,fontWeight:700,color:"#fff",lineHeight:1.2}}>Email Campaign Analytics</h1><p style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginTop:2}}>by kenn.d</p></div></div><div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}><div style={{display:"flex",gap:8}}><button onClick={()=>setShowSettings(true)} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.7)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:9,fontSize:11,cursor:"pointer"}}><Settings size={13}/> AI Settings</button><button onClick={()=>setShowUpload(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"8px 18px",background:C.primary,color:"#fff",border:"none",borderRadius:9,fontSize:12,fontWeight:600,cursor:"pointer"}}><Upload size={13}/> Upload</button><button onClick={clearAll} style={{padding:"8px 10px",background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.5)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,cursor:"pointer"}}><Trash2 size={13}/></button></div><p style={{fontSize:10,color:"rgba(255,255,255,0.3)"}}>{campaigns.length} campaigns | {clickers.length} contacts</p></div></div></header>
+      <header style={{background:`linear-gradient(135deg, ${C.dark} 0%, ${C.secondary} 100%)`,padding:"22px 28px 20px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{width:42,height:42,borderRadius:12,background:C.primary,display:"flex",alignItems:"center",justifyContent:"center"}}><Mail size={20} color="#fff"/></div><div><h1 style={{fontSize:20,fontWeight:700,color:"#fff",lineHeight:1.2}}>Email Campaign Analytics</h1><p style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginTop:2}}>by kenn.d</p></div></div><div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}><div style={{display:"flex",gap:8}}><button onClick={()=>setShowHistory(true)} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.7)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:9,fontSize:11,cursor:"pointer"}}><FileText size={13}/> History</button><button onClick={()=>setShowSettings(true)} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.7)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:9,fontSize:11,cursor:"pointer"}}><Settings size={13}/> AI Settings</button><button onClick={()=>setShowUpload(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"8px 18px",background:C.primary,color:"#fff",border:"none",borderRadius:9,fontSize:12,fontWeight:600,cursor:"pointer"}}><Upload size={13}/> Upload</button><button onClick={clearAll} style={{padding:"8px 10px",background:"rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.5)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:9,cursor:"pointer"}}><Trash2 size={13}/></button></div><p style={{fontSize:10,color:"rgba(255,255,255,0.3)"}}>{campaigns.length} campaigns | {clickers.length} contacts</p></div></div></header>
       <nav style={{display:"flex",padding:"0 24px",background:C.white,borderBottom:"1px solid #eae6ef",overflowX:"auto"}}>{tabs.map((t,i)=><button key={i} onClick={()=>setTab(i)} style={{display:"flex",alignItems:"center",gap:5,padding:"11px 14px",background:"none",border:"none",borderBottom:tab===i?`2px solid ${C.primary}`:"2px solid transparent",color:tab===i?C.primary:C.muted,fontSize:11,fontWeight:tab===i?700:500,cursor:"pointer",whiteSpace:"nowrap"}}><t.i size={13}/> {t.l}</button>)}</nav>
       <main style={{padding:"20px 24px",maxWidth:1400,margin:"0 auto"}}>
         {tab===0&&<OverviewTab campaigns={campaigns} nonPub={nonPubCampaigns} removeCampaign={removeCampaign}/>}
         {tab===1&&<CampaignListTab campaigns={campaigns} removeCampaign={removeCampaign}/>}
-        {tab===2&&<ClicksTab campaigns={nonPubCampaigns} clickers={nonPubClickers}/>}
+        {tab===2&&<ClicksTab campaigns={nonPubCampaigns} clickers={nonPubClickers} aiConfig={aiConfig}/>}
         {tab===3&&<VisualsTab campaigns={nonPubCampaigns} emailVisuals={emailVisuals} setEmailVisuals={ev=>{setEmailVisuals(ev);persist(campaigns,clickers,ev,notes)}}/>}
         {tab===4&&<NotesTab campaigns={nonPubCampaigns} notes={notes} generateNotes={generateNotes} generating={generating} removeNote={removeNote}/>}
         {tab===5&&<CustomAnalysisTab campaigns={nonPubCampaigns} clickers={nonPubClickers}/>}
         {tab===6&&<CustomReportsTab aiConfig={aiConfig}/>}
       </main>
-      {showUpload&&<UploadModal onClose={()=>setShowUpload(false)} addCampaign={addCampaign} addClickers={addClickers}/>}
+      {showUpload&&<UploadModal onClose={()=>setShowUpload(false)} addCampaign={addCampaign} addClickers={addClickers} onLog={(entry)=>{const nl=[...uploadLog,entry];setUploadLog(nl);persist(campaigns,clickers,emailVisuals,notes,aiConfig,nl)}}/>}
       {showSettings&&<SettingsModal config={aiConfig} onSave={c=>{setAiConfig(c);persist(campaigns,clickers,emailVisuals,notes,c);setShowSettings(false)}} onClose={()=>setShowSettings(false)}/>}
+      {showHistory&&<UploadHistoryModal log={uploadLog} onDelete={(id)=>{const nl=uploadLog.filter(e=>e.id!==id);setUploadLog(nl);persist(campaigns,clickers,emailVisuals,notes,aiConfig,nl)}} onRename={(id,name)=>{const nl=uploadLog.map(e=>e.id===id?{...e,label:name}:e);setUploadLog(nl);persist(campaigns,clickers,emailVisuals,notes,aiConfig,nl)}} onClose={()=>setShowHistory(false)}/>}
       <footer style={{textAlign:"center",padding:"20px 24px 16px",borderTop:"1px solid #e0dce6",marginTop:24}}><p style={{fontSize:10,color:C.muted}}>Email Campaign Analytics by kenn.d</p></footer>
     </div>
   );
@@ -106,7 +107,7 @@ return <div id="overview-page" style={{animation:"fadeIn .3s ease"}}>
 <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase"}}>Filter:</span><Sel value={tf} onChange={v=>{setTf(v);setLf("")}} options={CAMPAIGN_TYPES.filter(t=>t!=="Pub Comms")} placeholder="All Types"/><Sel value={lf} onChange={setLf} options={allL} placeholder="All Lists"/>{(tf||lf)&&<button onClick={()=>{setTf("");setLf("")}} style={{fontSize:11,color:C.primary,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Clear</button>}</div><div style={{display:"flex",gap:6}}><DlBtn id="overview-page" name="overview"/><button onClick={expCSV} style={{display:"flex",alignItems:"center",gap:3,padding:"4px 8px",background:"#f5f2f8",border:"1px solid #e8e4ee",borderRadius:6,fontSize:10,cursor:"pointer",color:C.muted,fontWeight:600}}><Download size={11}/> CSV</button></div></div>
 <div id="kpi-cards" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:12,marginBottom:20}}><KPI label="Open Rate" value={`${tot.sends>0?(tot.opens/tot.sends*100).toFixed(1):"0"}%`} sub={`${tot.opens.toLocaleString()} opens`} icon={Mail} color={C.primary}/><KPI label="Click Rate" value={`${tot.sends>0?(tot.clicks/tot.sends*100).toFixed(1):"0"}%`} sub={`${tot.clicks.toLocaleString()} clicks`} icon={MousePointerClick} color={C.secondary}/><KPI label="Bounce Rate" value={`${tot.sends>0?(tot.bounces/tot.sends*100).toFixed(1):"0"}%`} sub={`${tot.bounces.toLocaleString()} bounces`} icon={AlertTriangle} color={C.warning}/><KPI label="Unsubscribes" value={tot.unsubs.toLocaleString()} sub={`${filtered.length} campaigns`} icon={Users} color={C.danger}/></div>
 <div style={{display:"flex",justifyContent:"flex-end",marginBottom:6,marginTop:-12}}><DlBtn id="kpi-cards" name="kpi_summary"/></div>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}><CC title="Open Rate Trend" id="chart-open"><ResponsiveContainer width="100%" height={190}><AreaChart data={td}><defs><linearGradient id="og" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.primary} stopOpacity={.15}/><stop offset="95%" stopColor={C.primary} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="#f0ecf4"/><XAxis dataKey="month" fontSize={9} tick={{fill:C.muted}}/><YAxis fontSize={9} tick={{fill:C.muted}} tickFormatter={v=>`${v}%`}/><Tooltip content={({active,payload})=>{if(!active||!payload?.[0])return null;const d=payload[0].payload;return <div style={{background:"#fff",border:"1px solid #eee",borderRadius:8,padding:"8px 12px",fontSize:11}}><div style={{fontWeight:700,color:C.dark,marginBottom:2}}>{d.campaign}</div><div style={{color:C.primary}}>Open Rate: {d.openRate.toFixed(1)}%</div><div style={{color:C.muted,fontSize:10}}>{d.month}</div></div>}}/><Area type="monotone" dataKey="openRate" stroke={C.primary} fill="url(#og)" strokeWidth={2} dot={{r:3,fill:C.primary}}/></AreaChart></ResponsiveContainer></CC><CC title="Click Rate Trend" id="chart-click"><ResponsiveContainer width="100%" height={190}><AreaChart data={td}><defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.secondary} stopOpacity={.15}/><stop offset="95%" stopColor={C.secondary} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="#f0ecf4"/><XAxis dataKey="month" fontSize={9} tick={{fill:C.muted}}/><YAxis fontSize={9} tick={{fill:C.muted}} tickFormatter={v=>`${v}%`}/><Tooltip content={({active,payload})=>{if(!active||!payload?.[0])return null;const d=payload[0].payload;return <div style={{background:"#fff",border:"1px solid #eee",borderRadius:8,padding:"8px 12px",fontSize:11}}><div style={{fontWeight:700,color:C.dark,marginBottom:2}}>{d.campaign}</div><div style={{color:C.secondary}}>Click Rate: {d.clickRate.toFixed(1)}%</div><div style={{color:C.muted,fontSize:10}}>{d.month}</div></div>}}/><Area type="monotone" dataKey="clickRate" stroke={C.secondary} fill="url(#cg)" strokeWidth={2} dot={{r:3,fill:C.secondary}}/></AreaChart></ResponsiveContainer></CC></div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}><CC title="Open Rate - Trends Over Time" id="chart-open"><ResponsiveContainer width="100%" height={190}><AreaChart data={td}><defs><linearGradient id="og" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.primary} stopOpacity={.15}/><stop offset="95%" stopColor={C.primary} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="#f0ecf4"/><XAxis dataKey="month" fontSize={9} tick={{fill:C.muted}}/><YAxis fontSize={9} tick={{fill:C.muted}} tickFormatter={v=>`${v}%`}/><Tooltip content={({active,payload})=>{if(!active||!payload?.[0])return null;const d=payload[0].payload;return <div style={{background:"#fff",border:"1px solid #eee",borderRadius:8,padding:"8px 12px",fontSize:11}}><div style={{fontWeight:700,color:C.dark,marginBottom:2}}>{d.campaign}</div><div style={{color:C.primary}}>Open Rate: {d.openRate.toFixed(1)}%</div><div style={{color:C.muted,fontSize:10}}>{d.month}</div></div>}}/><Area type="monotone" dataKey="openRate" stroke={C.primary} fill="url(#og)" strokeWidth={2} dot={{r:3,fill:C.primary}}/></AreaChart></ResponsiveContainer></CC><CC title="Click Rate - Trends Over Time" id="chart-click"><ResponsiveContainer width="100%" height={190}><AreaChart data={td}><defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.secondary} stopOpacity={.15}/><stop offset="95%" stopColor={C.secondary} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="#f0ecf4"/><XAxis dataKey="month" fontSize={9} tick={{fill:C.muted}}/><YAxis fontSize={9} tick={{fill:C.muted}} tickFormatter={v=>`${v}%`}/><Tooltip content={({active,payload})=>{if(!active||!payload?.[0])return null;const d=payload[0].payload;return <div style={{background:"#fff",border:"1px solid #eee",borderRadius:8,padding:"8px 12px",fontSize:11}}><div style={{fontWeight:700,color:C.dark,marginBottom:2}}>{d.campaign}</div><div style={{color:C.secondary}}>Click Rate: {d.clickRate.toFixed(1)}%</div><div style={{color:C.muted,fontSize:10}}>{d.month}</div></div>}}/><Area type="monotone" dataKey="clickRate" stroke={C.secondary} fill="url(#cg)" strokeWidth={2} dot={{r:3,fill:C.secondary}}/></AreaChart></ResponsiveContainer></CC></div>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}><CC title="Top 5 Campaigns" id="top-camps">{top5.map((c,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i<4?"1px solid #f5f2f8":"none"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.dark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{i+1}. {c.name}</div><div style={{fontSize:10,color:C.muted}}>{c.listName}</div></div><div style={{display:"flex",gap:10,fontSize:10,flexShrink:0}}><span style={{color:C.primary,fontWeight:600}}>{c.opens?.toLocaleString()} ({c.openRate?.toFixed(1)}%)</span><span style={{color:C.secondary,fontWeight:600}}>{c.clicks?.toLocaleString()} ({c.clickRate?.toFixed(1)}%)</span></div></div>)}</CC><CC title="Best Subject Lines" id="best-sub">{topSub.length===0?<p style={{fontSize:11,color:C.muted}}>No subject lines yet.</p>:topSub.map((c,i)=><div key={i} style={{padding:"8px 0",borderBottom:i<topSub.length-1?"1px solid #f5f2f8":"none"}}><div style={{fontSize:12,fontWeight:600,color:C.dark,marginBottom:2}}>{c.subjectLine}</div><div style={{display:"flex",gap:8,fontSize:10,color:C.muted,alignItems:"center"}}><span>{c.name}</span><Badge color={C.success}>{c.openRate?.toFixed(1)}% open</Badge></div></div>)}</CC></div>
 <h3 style={{fontSize:13,fontWeight:700,color:C.dark,marginBottom:12}}>Campaigns by Type</h3>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:12}}>
@@ -132,23 +133,33 @@ function CampaignListTab({campaigns,removeCampaign}){
   <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}><thead><tr style={{borderBottom:"2px solid #f0ecf4"}}>{cols.map(h=><th key={h.key} onClick={()=>toggleSort(h.key)} style={{textAlign:"left",padding:"7px 8px",color:sortCol===h.key?C.secondary:C.muted,fontWeight:600,fontSize:10,textTransform:"uppercase",cursor:"pointer",whiteSpace:"nowrap",userSelect:"none"}}>{h.label}{sortIcon(h.key)}</th>)}<th style={{padding:"7px 8px"}}></th></tr></thead><tbody>{sorted.map((c,i)=><tr key={i} style={{borderBottom:"1px solid #f8f6fa"}} onMouseEnter={e=>e.currentTarget.style.background="#faf8fc"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><td style={{padding:"7px 8px",fontWeight:600,color:C.dark,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</td><td style={{padding:"7px 8px"}}><Badge color={c.type==="Pub Comms"?C.muted:C.secondary}>{c.type}</Badge></td><td style={{padding:"7px 8px",fontSize:10}}>{c.listName}</td><td style={{padding:"7px 8px",fontSize:10,color:C.muted,whiteSpace:"nowrap"}}>{c.date}</td><td style={{padding:"7px 8px"}}>{c.sends?.toLocaleString()}</td><td style={{padding:"7px 8px"}}>{c.opens?.toLocaleString()}</td><td style={{padding:"7px 8px",color:C.primary,fontWeight:600}}>{c.openRate?.toFixed(1)}%</td><td style={{padding:"7px 8px"}}>{c.clicks?.toLocaleString()}</td><td style={{padding:"7px 8px",color:C.secondary,fontWeight:600}}>{c.clickRate?.toFixed(1)}%</td><td style={{padding:"7px 8px"}}>{c.bounces}</td><td style={{padding:"7px 8px"}}>{c.unsubs}</td><td style={{padding:"7px 8px"}}><button onClick={()=>{if(confirm(`Remove "${c.name}"?`))removeCampaign(c.id)}} style={{background:"none",border:"none",cursor:"pointer",color:C.muted}}><Trash2 size={12}/></button></td></tr>)}</tbody></table></div></div></div>}
 
 // ========= TAB: CLICKS =========
-function ClicksTab({campaigns,clickers}){
-  const[tf,setTf]=useState("");const[lf,setLf]=useState("");const[search,setSearch]=useState("");const[cf,setCf]=useState("company");const[pf,setPf]=useState("state");
-  if(clickers.length===0)return <Empty msg="Upload clicker data to see engagement analysis."/>;
+function ClicksTab({campaigns,clickers,aiConfig}){
+  const[tf,setTf]=useState("");const[lf,setLf]=useState("");const[search,setSearch]=useState("");
+  const[cf,setCf]=useState("company");const[pf,setPf]=useState("state");
+  const[page,setPage]=useState(0);const PER_PAGE=100;
+  const[analyzerData,setAnalyzerData]=useState(null);
+  const[aiQ,setAiQ]=useState("");const[aiA,setAiA]=useState("");const[aiLoading,setAiLoading]=useState(false);
 
-  // Cascading filter: lists shown depend on selected type
+  // Cascading filters
   const filteredCamps = useMemo(() => tf ? campaigns.filter(c => c.type === tf) : campaigns, [campaigns, tf]);
   const allL = useMemo(() => [...new Set(filteredCamps.map(c => c.listName).filter(Boolean))], [filteredCamps]);
 
-  // Filter clickers - match by campaign name AND list name for accuracy
+  // Campaign-level metrics (from campaign data, not clickers)
+  const campMetrics = useMemo(() => {
+    let c = [...campaigns];
+    if (tf) c = c.filter(x => x.type === tf);
+    if (lf) c = c.filter(x => x.listName === lf);
+    const tot = {sends:0,clicks:0,count:c.length};
+    c.forEach(x => {tot.sends += x.sends||0; tot.clicks += x.clicks||0});
+    return {avgClickRate: tot.sends > 0 ? (tot.clicks/tot.sends*100) : 0, totalClickers: 0, campaigns: tot.count};
+  }, [campaigns, tf, lf]);
+
+  // Filter clickers
   const filtered = useMemo(() => {
     let list = [...clickers];
     if (tf) {
-      // Get all campaign names that match the selected type
-      const validCamps = campaigns.filter(c => c.type === tf);
-      const validNames = new Set(validCamps.map(c => c.name));
-      const validLists = new Set(validCamps.map(c => c.listName));
-      list = list.filter(c => validNames.has(c.campaignName) || validLists.has(c.listName));
+      const validNames = new Set(campaigns.filter(c => c.type === tf).map(c => c.name));
+      list = list.filter(c => validNames.has(c.campaignName));
     }
     if (lf) list = list.filter(c => c.listName === lf);
     if (search) {
@@ -158,7 +169,19 @@ function ClicksTab({campaigns,clickers}){
     return list;
   }, [clickers, tf, lf, search, campaigns]);
 
-  // Chart data - computed directly, no broken useMemo
+  // Cross-campaign contact recognition
+  const contactMap = useMemo(() => {
+    const m = {};
+    clickers.forEach(c => {
+      if (!c.email) return;
+      if (!m[c.email]) m[c.email] = {email:c.email,firstName:c.firstName,lastName:c.lastName,company:c.company,campaigns:new Set(),totalClicks:0,links:new Set()};
+      m[c.email].campaigns.add(c.campaignName);
+      m[c.email].totalClicks++;
+      if (c.linkClicked) m[c.email].links.add(c.linkClicked);
+    });
+    return m;
+  }, [clickers]);
+
   const getTop = (field, n) => {
     const m = {};
     filtered.forEach(c => { const v = c[field]; if (v) m[v] = (m[v] || 0) + 1; });
@@ -167,13 +190,77 @@ function ClicksTab({campaigns,clickers}){
   const barData = getTop(cf, 8);
   const pieData = getTop(pf, 8);
 
-  const expCSV=()=>{downloadCSVData(["Email","First Name","Last Name","Company","Account","State","Career Level","Dept","Contact Type","Region","Campaign","List"],filtered.map(c=>[c.email,c.firstName,c.lastName,c.company,c.accountName,c.state,c.careerLevel,c.department,c.contactType,c.region,c.campaignName,c.listName]),"clickers")};
+  const paged = filtered.slice(page * PER_PAGE, (page+1) * PER_PAGE);
+  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+
+  const expCSV = () => {
+    downloadCSVData(["Email","First Name","Last Name","Company","Account","State","Career Level","Dept","Contact Type","Region","Campaign","List","Link Clicked","Times Across Campaigns"],
+    filtered.map(c => {const cm = contactMap[c.email]; return [c.email,c.firstName,c.lastName,c.company,c.accountName,c.state,c.careerLevel,c.department,c.contactType,c.region,c.campaignName,c.listName,c.linkClicked,cm?cm.campaigns.size:1]}),"clickers");
+  };
+
+  // Click report analyzer
+  const handleAnalyzerUpload = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const rows = parseCSV(e.target.result);
+      const mapped = rows.map(r => mapClickerRow(r)).filter(c => c.email);
+      const urlMap = {};
+      const clickerMap = {};
+      mapped.forEach(c => {
+        if (c.linkClicked) urlMap[c.linkClicked] = (urlMap[c.linkClicked]||0) + 1;
+        if (!clickerMap[c.email]) clickerMap[c.email] = {email:c.email,firstName:c.firstName,lastName:c.lastName,company:c.company||c.holdingCompany,careerLevel:c.careerLevel,clicks:0,links:new Set()};
+        clickerMap[c.email].clicks++;
+        if (c.linkClicked) clickerMap[c.email].links.add(c.linkClicked);
+      });
+      const topUrls = Object.entries(urlMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
+      const topClickers = Object.values(clickerMap).sort((a,b)=>b.clicks-a.clicks).slice(0,20).map(c=>({...c,links:[...c.links]}));
+      const uniqueEmails = new Set(mapped.map(c=>c.email)).size;
+      setAnalyzerData({total:mapped.length,unique:uniqueEmails,topUrls,topClickers,fileName:file.name});
+    };
+    reader.readAsText(file);
+  };
+
+  // AI chat for clicker database
+  const askAI = async () => {
+    if (!aiQ.trim()) return;
+    setAiLoading(true);
+    try {
+      const sampleData = filtered.slice(0,50).map(c=>({email:c.email,name:c.firstName+" "+c.lastName,company:c.company,campaign:c.campaignName,list:c.listName,state:c.state,level:c.careerLevel}));
+      const multiCampContacts = Object.values(contactMap).filter(c=>c.campaigns.size>1).slice(0,20).map(c=>({email:c.email,campaigns:[...c.campaigns],totalClicks:c.totalClicks}));
+      const prompt = `You have access to an email campaign clicker database with ${clickers.length} total records across ${new Set(clickers.map(c=>c.campaignName)).size} campaigns.\n\nSample data (first 50): ${JSON.stringify(sampleData)}\n\nContacts appearing in multiple campaigns: ${JSON.stringify(multiCampContacts)}\n\nTotal unique emails: ${new Set(clickers.map(c=>c.email)).size}\nTotal companies: ${new Set(clickers.map(c=>c.company).filter(Boolean)).size}\n\nUser question: ${aiQ}\n\nAnswer concisely and accurately based on the data provided.`;
+      let text = "";
+      if (aiConfig.provider === "ollama") {
+        const r = await fetch(aiConfig.ollamaUrl+"/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:aiConfig.ollamaModel,prompt,stream:false})});
+        text = (await r.json()).response || "";
+      } else {
+        const h = {"Content-Type":"application/json"};
+        if (aiConfig.apiKey) h["x-api-key"] = aiConfig.apiKey;
+        const r = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:h,body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
+        text = (await r.json()).content?.map(c=>c.text||"").join("")||"";
+      }
+      setAiA(text);
+    } catch(err) { setAiA("Error: Could not get AI response. Check your AI settings."); }
+    setAiLoading(false);
+  };
 
   return <div style={{animation:"fadeIn .3s ease"}}>
-  <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase"}}>Filter:</span><Sel value={tf} onChange={v=>{setTf(v);setLf("")}} options={CAMPAIGN_TYPES.filter(t=>t!=="Pub Comms")} placeholder="All Types"/><Sel value={lf} onChange={setLf} options={allL} placeholder="All Lists"/>{(tf||lf)&&<button onClick={()=>{setTf("");setLf("")}} style={{fontSize:11,color:C.primary,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Clear</button>}</div>
-  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:12,marginBottom:20}}><KPI label="Total Clickers" value={filtered.length.toLocaleString()} icon={Users} color={C.primary}/><KPI label="Companies" value={new Set(filtered.map(c=>c.company).filter(Boolean)).size.toLocaleString()} icon={BarChart3} color={C.secondary}/><KPI label="States" value={new Set(filtered.map(c=>c.state).filter(Boolean)).size.toLocaleString()} icon={TrendingUp} color="#7c3aed"/><KPI label="Campaigns" value={new Set(filtered.map(c=>c.campaignName)).size.toLocaleString()} icon={Mail} color={C.bg1}/></div>
+  {/* Filters */}
+  <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}>
+    <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase"}}>Filter:</span>
+    <Sel value={tf} onChange={v=>{setTf(v);setLf("");setPage(0)}} options={CAMPAIGN_TYPES.filter(t=>t!=="Pub Comms")} placeholder="All Types"/>
+    <Sel value={lf} onChange={v=>{setLf(v);setPage(0)}} options={allL} placeholder="All Lists"/>
+    {(tf||lf)&&<button onClick={()=>{setTf("");setLf("");setPage(0)}} style={{fontSize:11,color:C.primary,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Clear</button>}
+  </div>
 
-  {barData.length > 0 || pieData.length > 0 ? (
+  {/* KPIs from campaign data */}
+  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:12,marginBottom:20}}>
+    <KPI label="Total Clickers" value={filtered.length.toLocaleString()} sub={`${new Set(filtered.map(c=>c.email)).size} unique`} icon={Users} color={C.primary}/>
+    <KPI label="Avg Click Rate" value={`${campMetrics.avgClickRate.toFixed(1)}%`} sub="from campaign data" icon={MousePointerClick} color={C.secondary}/>
+    <KPI label="Campaigns" value={campMetrics.campaigns.toLocaleString()} icon={Mail} color={C.bg1}/>
+  </div>
+
+  {/* Charts - only show if clickers exist */}
+  {filtered.length > 0 && (
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
       <CC title="Top by Contact Field (List Column)" id="chart-top" actions={<Sel value={cf} onChange={setCf} options={CF.map(f=>({value:f.key,label:f.label}))}/>}>
         {barData.length > 0 ? (
@@ -186,26 +273,109 @@ function ClicksTab({campaigns,clickers}){
               <Bar dataKey="count" fill={C.primary} radius={[0,5,5,0]}/>
             </BarChart>
           </ResponsiveContainer>
-        ) : <p style={{textAlign:"center",padding:40,color:C.muted,fontSize:12}}>No data for this field</p>}
+        ) : <p style={{textAlign:"center",padding:40,color:C.muted,fontSize:12}}>No data for selected field. Try a different field from the dropdown.</p>}
       </CC>
       <CC title="Distribution" id="chart-dist" actions={<Sel value={pf} onChange={setPf} options={CF.map(f=>({value:f.key,label:f.label}))}/>}>
         {pieData.length > 0 ? (
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie data={pieData.map(([n,v])=>({name:n,value:v}))} cx="50%" cy="45%" outerRadius={90} innerRadius={40} dataKey="value" paddingAngle={3}>
-                {pieData.map((_,i)=> <Cell key={i} fill={PIE_C[i%PIE_C.length]}/>)}
+                {pieData.map((_,i) => <Cell key={i} fill={PIE_C[i%PIE_C.length]}/>)}
               </Pie>
               <Tooltip contentStyle={{borderRadius:8,border:"1px solid #eee",fontSize:11}}/>
               <Legend iconSize={8} wrapperStyle={{fontSize:9,lineHeight:"18px",paddingTop:12}}/>
             </PieChart>
           </ResponsiveContainer>
-        ) : <p style={{textAlign:"center",padding:40,color:C.muted,fontSize:12}}>No data for this field</p>}
+        ) : <p style={{textAlign:"center",padding:40,color:C.muted,fontSize:12}}>No data for selected field.</p>}
       </CC>
     </div>
-  ) : null}
+  )}
 
-  {/* Clicker Database */}
-  <div style={{background:C.white,borderRadius:14,padding:18,border:"1px solid #f0ecf4"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}><h3 style={{fontSize:13,fontWeight:700,color:C.dark}}>Clicker Database</h3><div style={{display:"flex",gap:8}}><div style={{position:"relative"}}><Search size={12} style={{position:"absolute",left:8,top:8,color:C.muted}}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..." style={{padding:"7px 8px 7px 26px",borderRadius:8,border:"1px solid #e8e4ee",fontSize:11,width:160,outline:"none"}}/></div><button onClick={expCSV} style={{display:"flex",alignItems:"center",gap:4,padding:"7px 12px",background:C.secondary,color:"#fff",border:"none",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}><Download size={11}/> Export</button></div></div><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}><thead><tr style={{borderBottom:"2px solid #f0ecf4"}}>{["Email","Name","Company","Account","State","Level","Dept","Type","Campaign","List"].map(h=><th key={h} style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10,textTransform:"uppercase"}}>{h}</th>)}</tr></thead><tbody>{filtered.slice(0,50).map((c,i)=><tr key={i} style={{borderBottom:"1px solid #f8f6fa"}} onMouseEnter={e=>e.currentTarget.style.background="#faf8fc"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><td style={{padding:"7px 8px",color:C.secondary,fontWeight:500,fontSize:11}}>{c.email}</td><td style={{padding:"7px 8px"}}>{c.firstName} {c.lastName}</td><td style={{padding:"7px 8px"}}>{c.company}</td><td style={{padding:"7px 8px"}}>{c.accountName}</td><td style={{padding:"7px 8px"}}>{c.state}</td><td style={{padding:"7px 8px"}}>{c.careerLevel}</td><td style={{padding:"7px 8px"}}>{c.department}</td><td style={{padding:"7px 8px"}}>{c.contactType}</td><td style={{padding:"6px 6px"}}><span style={{fontSize:9,color:C.secondary,fontWeight:600,background:C.secondary+"12",padding:"2px 7px",borderRadius:12,whiteSpace:"nowrap"}}>{(c.campaignName||"").slice(0,20)}</span></td><td style={{padding:"7px 8px",fontSize:10,color:C.muted}}>{c.listName}</td></tr>)}</tbody></table>{filtered.length>50&&<p style={{textAlign:"center",padding:8,color:C.muted,fontSize:10}}>Showing 50 of {filtered.length}</p>}</div></div></div>}
+  {/* Clicker Database - paginated */}
+  <div style={{background:C.white,borderRadius:14,padding:18,border:"1px solid #f0ecf4",marginBottom:20}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+      <h3 style={{fontSize:13,fontWeight:700,color:C.dark}}>Clicker Database ({filtered.length} records)</h3>
+      <div style={{display:"flex",gap:8}}>
+        <div style={{position:"relative"}}><Search size={12} style={{position:"absolute",left:8,top:8,color:C.muted}}/><input value={search} onChange={e=>{setSearch(e.target.value);setPage(0)}} placeholder="Search..." style={{padding:"7px 8px 7px 26px",borderRadius:8,border:"1px solid #e8e4ee",fontSize:11,width:160,outline:"none"}}/></div>
+        <button onClick={expCSV} style={{display:"flex",alignItems:"center",gap:4,padding:"7px 12px",background:C.secondary,color:"#fff",border:"none",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}><Download size={11}/> Export All</button>
+      </div>
+    </div>
+    <div style={{overflowX:"auto"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+        <thead><tr style={{borderBottom:"2px solid #f0ecf4"}}>
+          {["Email","Name","Company","State","Level","Campaign","List","Link Clicked","Across Campaigns"].map(h =>
+            <th key={h} style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10,textTransform:"uppercase"}}>{h}</th>
+          )}
+        </tr></thead>
+        <tbody>{paged.map((c,i) => {
+          const cm = contactMap[c.email];
+          const multi = cm && cm.campaigns.size > 1;
+          return <tr key={i} style={{borderBottom:"1px solid #f8f6fa",background:multi?"#f5f0ff":"transparent"}} onMouseEnter={e=>e.currentTarget.style.background=multi?"#ede5ff":"#faf8fc"} onMouseLeave={e=>e.currentTarget.style.background=multi?"#f5f0ff":"transparent"}>
+            <td style={{padding:"7px 8px",color:C.secondary,fontWeight:500,fontSize:11}}>{c.email}</td>
+            <td style={{padding:"7px 8px"}}>{c.firstName} {c.lastName}</td>
+            <td style={{padding:"7px 8px"}}>{c.company}</td>
+            <td style={{padding:"7px 8px"}}>{c.state}</td>
+            <td style={{padding:"7px 8px"}}>{c.careerLevel}</td>
+            <td style={{padding:"6px 6px"}}><span style={{fontSize:9,color:C.secondary,fontWeight:600,background:C.secondary+"12",padding:"2px 7px",borderRadius:12,whiteSpace:"nowrap"}}>{(c.campaignName||"").slice(0,22)}</span></td>
+            <td style={{padding:"7px 8px",fontSize:10,color:C.muted}}>{c.listName}</td>
+            <td style={{padding:"7px 8px",fontSize:10,color:C.muted,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.linkClicked}</td>
+            <td style={{padding:"7px 8px",textAlign:"center"}}>{multi ? <Badge color={C.primary}>{cm.campaigns.size} campaigns</Badge> : <span style={{fontSize:10,color:C.muted}}>1</span>}</td>
+          </tr>
+        })}</tbody>
+      </table>
+    </div>
+    {/* Pagination */}
+    {totalPages > 1 && <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8,padding:"12px 0"}}>
+      <button onClick={()=>setPage(Math.max(0,page-1))} disabled={page===0} style={{padding:"6px 12px",borderRadius:6,border:"1px solid #e8e4ee",background:page===0?"#f5f2f8":C.white,color:page===0?C.muted:C.dark,fontSize:11,cursor:page===0?"default":"pointer"}}>Previous</button>
+      <span style={{fontSize:11,color:C.muted}}>Page {page+1} of {totalPages}</span>
+      <button onClick={()=>setPage(Math.min(totalPages-1,page+1))} disabled={page>=totalPages-1} style={{padding:"6px 12px",borderRadius:6,border:"1px solid #e8e4ee",background:page>=totalPages-1?"#f5f2f8":C.white,color:page>=totalPages-1?C.muted:C.dark,fontSize:11,cursor:page>=totalPages-1?"default":"pointer"}}>Next</button>
+    </div>}
+  </div>
+
+  {/* AI Chat for Clicker Database */}
+  <div style={{background:C.white,borderRadius:14,padding:18,border:"1px solid #f0ecf4",marginBottom:20}}>
+    <h3 style={{fontSize:13,fontWeight:700,color:C.dark,marginBottom:4}}>Ask AI About Clickers</h3>
+    <p style={{fontSize:11,color:C.muted,marginBottom:12}}>Ask questions like "Which contacts clicked in multiple campaigns?" or "What companies have the most clickers?"</p>
+    <div style={{display:"flex",gap:8,marginBottom:12}}>
+      <input value={aiQ} onChange={e=>setAiQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&askAI()} placeholder="Ask a question about your clicker data..." style={{flex:1,padding:"10px 14px",borderRadius:9,border:"1px solid #e8e4ee",fontSize:12,outline:"none"}}/>
+      <button onClick={askAI} disabled={aiLoading} style={{padding:"10px 18px",background:aiLoading?C.muted:`linear-gradient(135deg, ${C.primary}, ${C.secondary})`,color:"#fff",border:"none",borderRadius:9,fontSize:12,fontWeight:600,cursor:aiLoading?"default":"pointer"}}>
+        {aiLoading ? "Thinking..." : "Ask"}
+      </button>
+    </div>
+    {aiA && <div style={{background:"#f5f2fc",borderLeft:"4px solid "+C.secondary,padding:"14px 18px",borderRadius:"0 8px 8px 0",fontSize:12,lineHeight:1.7,color:C.dark,whiteSpace:"pre-wrap"}}>{aiA}</div>}
+  </div>
+
+  {/* Click Report Analyzer */}
+  <div style={{background:C.white,borderRadius:14,padding:18,border:"1px solid #f0ecf4"}}>
+    <h3 style={{fontSize:13,fontWeight:700,color:C.dark,marginBottom:4}}>Click Report Analyzer</h3>
+    <p style={{fontSize:11,color:C.muted,marginBottom:12}}>Upload a Mailchimp click report CSV to analyze clicks for a specific campaign.</p>
+    <DropZone label="Upload Click Report (CSV)" onFile={handleAnalyzerUpload} loaded={!!analyzerData} count={analyzerData?.total}/>
+
+    {analyzerData && <div style={{marginTop:16}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:12,marginBottom:16}}>
+        <KPI label="Total Clicks" value={analyzerData.total.toLocaleString()} icon={MousePointerClick} color={C.primary}/>
+        <KPI label="Unique Clickers" value={analyzerData.unique.toLocaleString()} icon={Users} color={C.secondary}/>
+      </div>
+
+      {analyzerData.topUrls.length > 0 && <div style={{marginBottom:16}}>
+        <h4 style={{fontSize:12,fontWeight:700,color:C.dark,marginBottom:8}}>Top URLs Clicked</h4>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <thead><tr style={{borderBottom:"2px solid #f0ecf4"}}><th style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10}}>URL</th><th style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10}}>CLICKS</th></tr></thead>
+          <tbody>{analyzerData.topUrls.map(([url,count],i) => <tr key={i} style={{borderBottom:"1px solid #f8f6fa"}}><td style={{padding:"7px 8px",color:C.secondary,fontSize:10,maxWidth:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{url}</td><td style={{padding:"7px 8px",fontWeight:700,color:C.primary}}>{count}</td></tr>)}</tbody>
+        </table>
+      </div>}
+
+      {analyzerData.topClickers.length > 0 && <div>
+        <h4 style={{fontSize:12,fontWeight:700,color:C.dark,marginBottom:8}}>Top Clickers</h4>
+        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <thead><tr style={{borderBottom:"2px solid #f0ecf4"}}>{["Email","Name","Company","Level","Times Clicked","Links Clicked"].map(h=><th key={h} style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10,textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+          <tbody>{analyzerData.topClickers.map((c,i) => <tr key={i} style={{borderBottom:"1px solid #f8f6fa"}}><td style={{padding:"7px 8px",color:C.secondary,fontWeight:500}}>{c.email}</td><td style={{padding:"7px 8px"}}>{c.firstName} {c.lastName}</td><td style={{padding:"7px 8px"}}>{c.company}</td><td style={{padding:"7px 8px"}}>{c.careerLevel}</td><td style={{padding:"7px 8px",fontWeight:700,color:C.primary}}>{c.clicks}</td><td style={{padding:"7px 8px",fontSize:10,color:C.muted}}>{c.links.slice(0,2).join(", ")}{c.links.length>2?` +${c.links.length-2}`:""}</td></tr>)}</tbody>
+        </table></div>
+      </div>}
+    </div>}
+  </div>
+  </div>}
+
 
 // ========= TAB: VISUALS =========
 function VisualsTab({campaigns,emailVisuals,setEmailVisuals}){const[sc,setSc]=useState("");const[pu,setPu]=useState("");const addUrl=()=>{if(!sc||!pu)return;setEmailVisuals([...emailVisuals,{campaignName:sc,type:"url",value:pu,id:Date.now().toString()}]);setPu("")};const hImg=(file,cn)=>{const r=new FileReader();r.onload=e=>{setEmailVisuals([...emailVisuals,{campaignName:cn,type:"image",value:e.target.result,id:Date.now().toString(),fileName:file.name}])};r.readAsDataURL(file)};const rm=id=>setEmailVisuals(emailVisuals.filter(x=>x.id!==id));return <div style={{animation:"fadeIn .3s ease"}}><div style={{background:C.white,borderRadius:14,padding:18,border:"1px solid #f0ecf4",marginBottom:20}}><h3 style={{fontSize:13,fontWeight:700,color:C.dark,marginBottom:12}}>Add Email Preview</h3><div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}><div><label style={{display:"block",fontSize:10,fontWeight:600,color:C.muted,marginBottom:3,textTransform:"uppercase"}}>Campaign</label><select value={sc} onChange={e=>setSc(e.target.value)} style={{padding:"8px 10px",borderRadius:8,border:"1px solid #e8e4ee",fontSize:11,minWidth:170,outline:"none"}}><option value="">Select...</option>{campaigns.map((c,i)=><option key={i} value={c.name}>{c.name} ({c.listName})</option>)}</select></div><div style={{flex:1,minWidth:160}}><label style={{display:"block",fontSize:10,fontWeight:600,color:C.muted,marginBottom:3,textTransform:"uppercase"}}>Preview URL</label><input value={pu} onChange={e=>setPu(e.target.value)} placeholder="https://mailchi.mp/..." style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #e8e4ee",fontSize:11,outline:"none"}}/></div><button onClick={addUrl} style={{padding:"8px 14px",background:C.primary,color:"#fff",border:"none",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}>Add URL</button></div></div>{campaigns.map((camp,ci)=><VCard key={ci} camp={camp} vis={emailVisuals.filter(v=>v.campaignName===camp.name)} hImg={hImg} rm={rm}/>)}</div>}
@@ -458,8 +628,37 @@ ${screenshot ? `<div class="section-title">Email Preview</div><div class="screen
   );
 }
 
+// ========= UPLOAD HISTORY MODAL =========
+function UploadHistoryModal({log,onDelete,onRename,onClose}){
+  const[confirmId,setConfirmId]=useState(null);const[editId,setEditId]=useState(null);const[editVal,setEditVal]=useState("");
+  const sorted=[...log].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(4px)"}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.white,borderRadius:18,width:"92%",maxWidth:600,maxHeight:"85vh",overflow:"auto",animation:"slideUp .3s ease"}}>
+      <div style={{padding:"18px 22px",borderBottom:"1px solid #f0ecf4",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <h2 style={{fontSize:16,fontWeight:700,color:C.dark}}>Upload History</h2>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.muted}}><X size={17}/></button>
+      </div>
+      <div style={{padding:22}}>
+        {sorted.length===0?<p style={{textAlign:"center",color:C.muted,padding:20,fontSize:12}}>No uploads yet.</p>:
+        sorted.map(e => <div key={e.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid #f5f2f8"}}>
+          <div style={{flex:1,minWidth:0}}>
+            {editId===e.id?<div style={{display:"flex",gap:6}}><input value={editVal} onChange={ev=>setEditVal(ev.target.value)} style={{flex:1,padding:"6px 10px",borderRadius:6,border:"1px solid #e8e4ee",fontSize:12,outline:"none"}}/><button onClick={()=>{onRename(e.id,editVal);setEditId(null)}} style={{padding:"6px 12px",background:C.secondary,color:"#fff",border:"none",borderRadius:6,fontSize:11,cursor:"pointer"}}>Save</button><button onClick={()=>setEditId(null)} style={{padding:"6px 12px",background:"#f5f2f8",border:"none",borderRadius:6,fontSize:11,cursor:"pointer",color:C.muted}}>Cancel</button></div>:
+            <><div style={{fontSize:12,fontWeight:600,color:C.dark}}>{e.label||e.fileName}</div>
+            <div style={{fontSize:10,color:C.muted}}>{e.type} | {new Date(e.date).toLocaleString()} | {e.records} records</div></>}
+          </div>
+          <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}>
+            {editId!==e.id&&<button onClick={()=>{setEditId(e.id);setEditVal(e.label||e.fileName)}} style={{padding:"4px 8px",background:"#f5f2f8",border:"1px solid #e8e4ee",borderRadius:6,fontSize:10,cursor:"pointer",color:C.muted}}>Rename</button>}
+            {confirmId===e.id?<div style={{display:"flex",gap:4,alignItems:"center"}}><span style={{fontSize:10,color:C.danger}}>Are you sure?</span><button onClick={()=>{onDelete(e.id);setConfirmId(null)}} style={{padding:"4px 8px",background:C.danger,color:"#fff",border:"none",borderRadius:6,fontSize:10,cursor:"pointer"}}>Yes, Delete</button><button onClick={()=>setConfirmId(null)} style={{padding:"4px 8px",background:"#f5f2f8",border:"1px solid #e8e4ee",borderRadius:6,fontSize:10,cursor:"pointer",color:C.muted}}>Cancel</button></div>:
+            <button onClick={()=>setConfirmId(e.id)} style={{padding:"4px 8px",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:6,fontSize:10,cursor:"pointer",color:C.danger}}><Trash2 size={10}/></button>}
+          </div>
+        </div>)}
+      </div>
+    </div>
+  </div>;
+}
+
 // ========= UPLOAD MODAL =========
-function UploadModal({onClose,addCampaign,addClickers}){
+function UploadModal({onClose,addCampaign,addClickers,onLog}){
   const[step,setStep]=useState(1);const[cn,setCn]=useState("");const[ct,setCt]=useState(CAMPAIGN_TYPES[0]);const[ln,setLn]=useState("");const[cp,setCp]=useState(null);const[cd,setCd]=useState(null);const[ck,setCk]=useState(null);const[parsing,setParsing]=useState(false);const[result,setResult]=useState(null);
   const handleFile=(file,target)=>{const reader=new FileReader();reader.onload=e=>{const text=e.target.result;if(target==="campaign"){if(ct==="Pub Comms"&&isPubCommsCSV(text)){const rows=parseCSV(text);const parsed=parsePubCommsCSV(rows);setCp({_isPubComms:true,campaigns:parsed});setCd(null);if(!cn&&parsed.length>0){const common=parsed[0].name.split(" - ").slice(0,-1).join(" - ");setCn(common||parsed[0].name)}}else if(isMailchimpReport(text)){const p=parseMailchimpReport(text);setCp(p);setCd(null);if(!cn&&p.title)setCn(p.title)}else{setCd(parseCSV(text));setCp(null)}}else{setCk(parseCSV(text))}};reader.readAsText(file)};
 
@@ -468,6 +667,7 @@ function UploadModal({onClose,addCampaign,addClickers}){
     else if(cp?._isMailchimpReport){const p=cp;addCampaign({name:useName,type:ct,listName:useList,subjectLine:p.subjectLine,sends:p.sends,delivered:p.delivered,opens:p.opens,totalOpens:p.totalOpens,clicks:p.clicks,totalClicks:p.totalClicks,bounces:p.bounces,unsubs:p.unsubs,openRate:p.openRate,clickRate:p.clickRate,bounceRate:p.bounceRate,date:p.date||new Date().toISOString().slice(0,10),urlClicks:p.urlClicks||[]});processed++}
     else if(cd?.length>0){const keys=Object.keys(cd[0]);const fc=pats=>keys.find(k=>pats.some(p=>k.toLowerCase().includes(p)))||null;const rows=ct==="Pub Comms"&&cd.length>1?cd:[cd[0]];rows.forEach(row=>{addCampaign({name:cleanVal(row[fc(["campaign","name","subject"])])||useName,type:ct,listName:useList,sends:parseInt((row[fc(["sent","send","recipients"])]||"0").replace(/,/g,""),10),opens:parseInt((row[fc(["open","unique open"])]||"0").replace(/,/g,""),10),clicks:parseInt((row[fc(["click","unique click"])]||"0").replace(/,/g,""),10),bounces:parseInt((row[fc(["bounce"])]||"0").replace(/,/g,""),10),unsubs:parseInt((row[fc(["unsub"])]||"0").replace(/,/g,""),10),openRate:parseFloat((row[fc(["open rate"])]||"0").replace("%","")),clickRate:parseFloat((row[fc(["click rate"])]||"0").replace("%","")),bounceRate:parseFloat((row[fc(["bounce rate"])]||"0").replace("%","")),date:row[fc(["date","send date"])]||new Date().toISOString().slice(0,10)});processed++})}
     let cc=0;if(ck?.length>0){const mapped=ck.map(row=>mapClickerRow(row)).filter(c=>c.email);addClickers(mapped,useName,useList);cc=mapped.length}
+    if(onLog)onLog({id:Date.now().toString(),fileName:useName,type:ct,date:new Date().toISOString(),records:processed+cc,label:""});
     setResult({campaigns:processed,clickers:cc});setParsing(false);setStep(3)},500)};
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(4px)"}} onClick={onClose}><div onClick={e=>e.stopPropagation()} style={{background:C.white,borderRadius:18,width:"92%",maxWidth:560,maxHeight:"92vh",overflow:"auto",animation:"slideUp .3s ease"}}><div style={{padding:"18px 22px",borderBottom:"1px solid #f0ecf4",display:"flex",justifyContent:"space-between",alignItems:"center"}}><h2 style={{fontSize:16,fontWeight:700,color:C.dark}}>Upload Campaign Data</h2><button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.muted}}><X size={17}/></button></div><div style={{padding:22}}>
