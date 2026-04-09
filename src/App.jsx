@@ -135,19 +135,74 @@ function CampaignListTab({campaigns,removeCampaign}){
 function ClicksTab({campaigns,clickers}){
   const[tf,setTf]=useState("");const[lf,setLf]=useState("");const[search,setSearch]=useState("");const[cf,setCf]=useState("company");const[pf,setPf]=useState("state");
   if(clickers.length===0)return <Empty msg="Upload clicker data to see engagement analysis."/>;
+
   // Cascading filter: lists shown depend on selected type
-  const filteredCampaignsByType = useMemo(() => tf ? campaigns.filter(c => c.type === tf) : campaigns, [campaigns, tf]);
-  const allL = useMemo(() => [...new Set(filteredCampaignsByType.map(c => c.listName).filter(Boolean))], [filteredCampaignsByType]);
-  const filtered=useMemo(()=>{let list=[...clickers];if(tf){const cn=campaigns.filter(c=>c.type===tf).map(c=>c.name);list=list.filter(c=>cn.includes(c.campaignName))}if(lf)list=list.filter(c=>c.listName===lf);if(search){const s=search.toLowerCase();list=list.filter(c=>Object.values(c).some(v=>String(v).toLowerCase().includes(s)))}return list},[clickers,tf,lf,search,campaigns]);
-  const getTop=(field,n=8)=>{const m={};filtered.forEach(c=>{const v=c[field];if(v)m[v]=(m[v]||0)+1});return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,n)};
-  const barData=useMemo(()=>getTop(cf),[filtered,cf]);
-  const pieData=useMemo(()=>getTop(pf),[filtered,pf]);
+  const filteredCamps = useMemo(() => tf ? campaigns.filter(c => c.type === tf) : campaigns, [campaigns, tf]);
+  const allL = useMemo(() => [...new Set(filteredCamps.map(c => c.listName).filter(Boolean))], [filteredCamps]);
+
+  // Filter clickers - match by campaign name AND list name for accuracy
+  const filtered = useMemo(() => {
+    let list = [...clickers];
+    if (tf) {
+      // Get all campaign names that match the selected type
+      const validCamps = campaigns.filter(c => c.type === tf);
+      const validNames = new Set(validCamps.map(c => c.name));
+      const validLists = new Set(validCamps.map(c => c.listName));
+      list = list.filter(c => validNames.has(c.campaignName) || validLists.has(c.listName));
+    }
+    if (lf) list = list.filter(c => c.listName === lf);
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(c => Object.values(c).some(v => String(v).toLowerCase().includes(s)));
+    }
+    return list;
+  }, [clickers, tf, lf, search, campaigns]);
+
+  // Chart data - computed directly, no broken useMemo
+  const getTop = (field, n) => {
+    const m = {};
+    filtered.forEach(c => { const v = c[field]; if (v) m[v] = (m[v] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n || 8);
+  };
+  const barData = getTop(cf, 8);
+  const pieData = getTop(pf, 8);
 
   const expCSV=()=>{downloadCSVData(["Email","First Name","Last Name","Company","Account","State","Career Level","Dept","Contact Type","Region","Campaign","List"],filtered.map(c=>[c.email,c.firstName,c.lastName,c.company,c.accountName,c.state,c.careerLevel,c.department,c.contactType,c.region,c.campaignName,c.listName]),"clickers")};
+
   return <div style={{animation:"fadeIn .3s ease"}}>
   <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase"}}>Filter:</span><Sel value={tf} onChange={v=>{setTf(v);setLf("")}} options={CAMPAIGN_TYPES.filter(t=>t!=="Pub Comms")} placeholder="All Types"/><Sel value={lf} onChange={setLf} options={allL} placeholder="All Lists"/>{(tf||lf)&&<button onClick={()=>{setTf("");setLf("")}} style={{fontSize:11,color:C.primary,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Clear</button>}</div>
   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:12,marginBottom:20}}><KPI label="Total Clickers" value={filtered.length.toLocaleString()} icon={Users} color={C.primary}/><KPI label="Companies" value={new Set(filtered.map(c=>c.company).filter(Boolean)).size.toLocaleString()} icon={BarChart3} color={C.secondary}/><KPI label="States" value={new Set(filtered.map(c=>c.state).filter(Boolean)).size.toLocaleString()} icon={TrendingUp} color="#7c3aed"/><KPI label="Campaigns" value={new Set(filtered.map(c=>c.campaignName)).size.toLocaleString()} icon={Mail} color={C.bg1}/></div>
-  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}><CC title="Top by Contact Field (List Column)" id="chart-top" actions={<Sel value={cf} onChange={setCf} options={CF.map(f=>({value:f.key,label:f.label}))}/>}><ResponsiveContainer width="100%" height={300}><BarChart data={barData.map(([n,c])=>({name:n.slice(0,24),count:c}))} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#f0ecf4"/><XAxis type="number" fontSize={10} tick={{fill:C.muted}}/><YAxis dataKey="name" type="category" fontSize={9} tick={{fill:C.muted}} width={140}/><Tooltip contentStyle={{borderRadius:8,border:"1px solid #eee",fontSize:11}}/><Bar dataKey="count" fill={C.primary} radius={[0,5,5,0]}/></BarChart></ResponsiveContainer></CC><CC title="Distribution" id="chart-dist" actions={<Sel value={pf} onChange={setPf} options={CF.map(f=>({value:f.key,label:f.label}))}/>}><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={pieData.map(([n,v])=>({name:n,value:v}))} cx="50%" cy="45%" outerRadius={90} innerRadius={40} dataKey="value" paddingAngle={3}>{pieData.map((_,i)=><Cell key={i} fill={PIE_C[i%PIE_C.length]}/>)}</Pie><Tooltip contentStyle={{borderRadius:8,border:"1px solid #eee",fontSize:11}}/><Legend iconSize={8} wrapperStyle={{fontSize:9,lineHeight:"18px",paddingTop:12}}/></PieChart></ResponsiveContainer></CC></div>
+
+  {barData.length > 0 || pieData.length > 0 ? (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:20}}>
+      <CC title="Top by Contact Field (List Column)" id="chart-top" actions={<Sel value={cf} onChange={setCf} options={CF.map(f=>({value:f.key,label:f.label}))}/>}>
+        {barData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={barData.map(([n,c])=>({name:n.slice(0,24),count:c}))} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0ecf4"/>
+              <XAxis type="number" fontSize={10} tick={{fill:C.muted}}/>
+              <YAxis dataKey="name" type="category" fontSize={9} tick={{fill:C.muted}} width={140}/>
+              <Tooltip contentStyle={{borderRadius:8,border:"1px solid #eee",fontSize:11}}/>
+              <Bar dataKey="count" fill={C.primary} radius={[0,5,5,0]}/>
+            </BarChart>
+          </ResponsiveContainer>
+        ) : <p style={{textAlign:"center",padding:40,color:C.muted,fontSize:12}}>No data for this field</p>}
+      </CC>
+      <CC title="Distribution" id="chart-dist" actions={<Sel value={pf} onChange={setPf} options={CF.map(f=>({value:f.key,label:f.label}))}/>}>
+        {pieData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie data={pieData.map(([n,v])=>({name:n,value:v}))} cx="50%" cy="45%" outerRadius={90} innerRadius={40} dataKey="value" paddingAngle={3}>
+                {pieData.map((_,i)=> <Cell key={i} fill={PIE_C[i%PIE_C.length]}/>)}
+              </Pie>
+              <Tooltip contentStyle={{borderRadius:8,border:"1px solid #eee",fontSize:11}}/>
+              <Legend iconSize={8} wrapperStyle={{fontSize:9,lineHeight:"18px",paddingTop:12}}/>
+            </PieChart>
+          </ResponsiveContainer>
+        ) : <p style={{textAlign:"center",padding:40,color:C.muted,fontSize:12}}>No data for this field</p>}
+      </CC>
+    </div>
+  ) : null}
 
   {/* Clicker Database */}
   <div style={{background:C.white,borderRadius:14,padding:18,border:"1px solid #f0ecf4"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}><h3 style={{fontSize:13,fontWeight:700,color:C.dark}}>Clicker Database</h3><div style={{display:"flex",gap:8}}><div style={{position:"relative"}}><Search size={12} style={{position:"absolute",left:8,top:8,color:C.muted}}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..." style={{padding:"7px 8px 7px 26px",borderRadius:8,border:"1px solid #e8e4ee",fontSize:11,width:160,outline:"none"}}/></div><button onClick={expCSV} style={{display:"flex",alignItems:"center",gap:4,padding:"7px 12px",background:C.secondary,color:"#fff",border:"none",borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer"}}><Download size={11}/> Export</button></div></div><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}><thead><tr style={{borderBottom:"2px solid #f0ecf4"}}>{["Email","Name","Company","Account","State","Level","Dept","Type","Campaign","List"].map(h=><th key={h} style={{textAlign:"left",padding:"7px 8px",color:C.muted,fontWeight:600,fontSize:10,textTransform:"uppercase"}}>{h}</th>)}</tr></thead><tbody>{filtered.slice(0,50).map((c,i)=><tr key={i} style={{borderBottom:"1px solid #f8f6fa"}} onMouseEnter={e=>e.currentTarget.style.background="#faf8fc"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><td style={{padding:"7px 8px",color:C.secondary,fontWeight:500,fontSize:11}}>{c.email}</td><td style={{padding:"7px 8px"}}>{c.firstName} {c.lastName}</td><td style={{padding:"7px 8px"}}>{c.company}</td><td style={{padding:"7px 8px"}}>{c.accountName}</td><td style={{padding:"7px 8px"}}>{c.state}</td><td style={{padding:"7px 8px"}}>{c.careerLevel}</td><td style={{padding:"7px 8px"}}>{c.department}</td><td style={{padding:"7px 8px"}}>{c.contactType}</td><td style={{padding:"6px 6px"}}><span style={{fontSize:9,color:C.secondary,fontWeight:600,background:C.secondary+"12",padding:"2px 7px",borderRadius:12,whiteSpace:"nowrap"}}>{(c.campaignName||"").slice(0,20)}</span></td><td style={{padding:"7px 8px",fontSize:10,color:C.muted}}>{c.listName}</td></tr>)}</tbody></table>{filtered.length>50&&<p style={{textAlign:"center",padding:8,color:C.muted,fontSize:10}}>Showing 50 of {filtered.length}</p>}</div></div></div>}
